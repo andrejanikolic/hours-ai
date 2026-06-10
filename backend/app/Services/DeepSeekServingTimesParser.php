@@ -73,6 +73,17 @@ class DeepSeekServingTimesParser
             throw new \RuntimeException('DeepSeek returned invalid JSON');
         }
 
+        // Handle both response shapes:
+        // - object: {clarification_needed, clarification_message, serving_times: [...]}
+        // - plain array: [...] (DeepSeek sometimes ignores the wrapper schema)
+        if (array_is_list($parsed)) {
+            return [
+                'serving_times'         => $this->sanitizeRows($parsed),
+                'clarification_needed'  => false,
+                'clarification_message' => null,
+            ];
+        }
+
         $clarificationNeeded = (bool) ($parsed['clarification_needed'] ?? false);
 
         return [
