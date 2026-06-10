@@ -114,7 +114,7 @@ async function onApplyConfirm(): Promise<void> {
           <span class="card__sparkle" aria-hidden="true">✦</span>
           Describe your serving times in plain English
         </h3>
-        <p class="card__hint">DeepSeek will turn it into a structured preview before anything is saved.</p>
+        <p class="card__hint">HoursAI will turn it into a structured preview before anything is saved.</p>
       </header>
 
       <AppTextarea

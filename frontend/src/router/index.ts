@@ -5,8 +5,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/test',
     name: 'test',
-    component: () => import('../components/DeepSeekTestPage.vue'),
-    meta: { title: 'DeepSeek Test' },
+    component: () => import('../components/HoursAITestPage.vue'),
+    meta: { title: 'HoursAI Test' },
   },
   {
     path: '/brands',

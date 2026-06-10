@@ -234,7 +234,7 @@ onMounted(fetchAll)
         <span class="header__icon">🕐</span>
         <div>
           <h1 class="header__title">HoursAI</h1>
-          <p class="header__sub">Set opening hours with natural language — powered by DeepSeek</p>
+          <p class="header__sub">Set opening hours with natural language — powered by HoursAI</p>
         </div>
       </div>
     </header>
@@ -361,7 +361,7 @@ onMounted(fetchAll)
         v-model="prompt"
         class="prompt-input"
         rows="3"
-        placeholder="e.g. open every day from 09:00 to 22:00, close on Sundays&#10;or paste a full location table — DeepSeek will match by name"
+        placeholder="e.g. open every day from 09:00 to 22:00, close on Sundays&#10;or paste a full location table — HoursAI will match by name"
       />
 
       <div class="prompt-card__footer">
@@ -377,7 +377,7 @@ onMounted(fetchAll)
           <button class="btn btn--primary" :class="{ 'btn--loading': parsing }" :disabled="!canPreview" @click="parse">
             <span v-if="parsing" class="spinner" />
             <span v-else>✨</span>
-            {{ parsing ? 'Asking DeepSeek…' : 'Preview with DeepSeek' }}
+            {{ parsing ? 'Asking HoursAI…' : 'Preview with HoursAI' }}
           </button>
         </div>
       </div>
@@ -426,7 +426,7 @@ onMounted(fetchAll)
         </div>
 
         <div v-else-if="p.clarification_needed" class="alert alert--warn">
-          <strong>DeepSeek needs more info:</strong> {{ p.clarification_message }}
+          <strong>HoursAI needs more info:</strong> {{ p.clarification_message }}
         </div>
 
         <table v-else class="preview-table">
