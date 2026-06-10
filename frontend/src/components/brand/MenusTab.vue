@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
-import { useMenus } from '../../composables/useMenus'
 import { useVenues } from '../../composables/useVenues'
+import { useMenus } from '../../composables/useMenus'
 import { useServingTimes } from '../../composables/useServingTimes'
 import { useToast } from '../../composables/useToast'
 import { ApiError } from '../../composables/useApi'
 import { sameSchedule } from '../../composables/scheduleCompare'
-import type { Menu, ParseResult, ServingTime } from '../../types'
+import type { ParseResult, ServingTime } from '../../types'
 
 import AppButton from '../shared/AppButton.vue'
 import AppTextarea from '../shared/AppTextarea.vue'
@@ -17,37 +16,41 @@ import ServingTimesDiff from '../serving-times/ServingTimesDiff.vue'
 
 const props = defineProps<{ brandId: number }>()
 
-interface MenuWithVenue extends Menu {
+interface MenuRow {
+  menuId: number
+  menuName: string
+  description: string | null
+  active: boolean
+  venueId: number
   venueName: string
-  brandId: number
+  current: ServingTime[]
 }
 
 interface MenuPreview {
   menuId: number
-  menuName: string
-  venueName: string
-  current: ServingTime[]
+  row: MenuRow
   proposed: ParseResult
   error?: string
   skipped: boolean
   noChange: boolean
 }
 
-const menus = ref<MenuWithVenue[]>([])
+const rows = ref<MenuRow[]>([])
+const venueOptions = ref<{ id: number; name: string; count: number }[]>([])
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
+const venueFilter = ref<number | 'all'>('all')
 const selectedIds = ref<Set<number>>(new Set())
 const prompt = ref('')
 
 const parsing = ref(false)
 const parseProgress = ref<{ done: number; total: number } | null>(null)
 const previews = ref<MenuPreview[]>([])
-
 const applying = ref(false)
 
-const { list: listMenus } = useMenus()
 const { list: listVenues } = useVenues()
+const { list: listMenus } = useMenus()
 const { parse: parseHours, replace: replaceHours, list: listServingTimes } =
   useServingTimes()
 const toast = useToast()
@@ -104,13 +107,29 @@ async function load(): Promise<void> {
     const venues = await listVenues(props.brandId)
     const perVenue = await Promise.all(
       venues.map((v) =>
-        listMenus(props.brandId, v.id).then((ms) =>
-          ms.map((m) => ({ ...m, venueName: v.name, brandId: props.brandId })),
-        ),
+        listMenus(props.brandId, v.id).then((menus) => ({ venue: v, menus })),
       ),
     )
-    menus.value = perVenue.flat()
-    selectedIds.value = new Set(menus.value.map((m) => m.id))
+
+    const flat: MenuRow[] = []
+    const venueCounts: { id: number; name: string; count: number }[] = []
+    for (const { venue, menus } of perVenue) {
+      venueCounts.push({ id: venue.id, name: venue.name, count: menus.length })
+      for (const m of menus) {
+        flat.push({
+          menuId: m.id,
+          menuName: m.name,
+          description: m.description,
+          active: m.active,
+          venueId: venue.id,
+          venueName: venue.name,
+          current: m.serving_times ?? [],
+        })
+      }
+    }
+    rows.value = flat
+    venueOptions.value = venueCounts
+    selectedIds.value = new Set(flat.map((r) => r.menuId))
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : 'Network error'
   } finally {
@@ -118,17 +137,33 @@ async function load(): Promise<void> {
   }
 }
 
+const filteredRows = computed(() =>
+  venueFilter.value === 'all'
+    ? rows.value
+    : rows.value.filter((r) => r.venueId === venueFilter.value),
+)
+
+const visibleSelectedCount = computed(
+  () => filteredRows.value.filter((r) => selectedIds.value.has(r.menuId)).length,
+)
+
 const allChecked = computed(
   () =>
-    menus.value.length > 0 &&
-    menus.value.every((m) => selectedIds.value.has(m.id)),
+    filteredRows.value.length > 0 &&
+    filteredRows.value.every((r) => selectedIds.value.has(r.menuId)),
 )
-const someChecked = computed(() => selectedIds.value.size > 0 && !allChecked.value)
+const someChecked = computed(
+  () => visibleSelectedCount.value > 0 && !allChecked.value,
+)
 
 function toggleAll(): void {
-  selectedIds.value = allChecked.value
-    ? new Set()
-    : new Set(menus.value.map((m) => m.id))
+  const next = new Set(selectedIds.value)
+  if (allChecked.value) {
+    for (const r of filteredRows.value) next.delete(r.menuId)
+  } else {
+    for (const r of filteredRows.value) next.add(r.menuId)
+  }
+  selectedIds.value = next
 }
 
 function toggle(id: number): void {
@@ -137,7 +172,9 @@ function toggle(id: number): void {
   selectedIds.value = next
 }
 
-const targets = computed(() => menus.value.filter((m) => selectedIds.value.has(m.id)))
+const targets = computed(() =>
+  filteredRows.value.filter((r) => selectedIds.value.has(r.menuId)),
+)
 const canParse = computed(
   () => prompt.value.trim().length > 0 && !parsing.value && targets.value.length > 0,
 )
@@ -154,24 +191,22 @@ async function onParse(): Promise<void> {
   parseProgress.value = { done: 0, total: targets.value.length }
 
   const text = prompt.value.trim()
-  const targetList = targets.value
+  const list = targets.value
   const results: MenuPreview[] = []
 
   const BATCH = 3
-  for (let i = 0; i < targetList.length; i += BATCH) {
-    const batch = targetList.slice(i, i + BATCH)
+  for (let i = 0; i < list.length; i += BATCH) {
+    const batch = list.slice(i, i + BATCH)
     const batchResults = await Promise.all(
-      batch.map(async (menu): Promise<MenuPreview> => {
+      batch.map(async (row): Promise<MenuPreview> => {
         try {
           const [current, proposed] = await Promise.all([
-            listServingTimes('menu', menu.id),
-            parseHours('menu', menu.id, text, menu.name),
+            listServingTimes('menu', row.menuId),
+            parseHours('menu', row.menuId, text, `${row.venueName} · ${row.menuName}`),
           ])
           return {
-            menuId: menu.id,
-            menuName: menu.name,
-            venueName: menu.venueName,
-            current,
+            menuId: row.menuId,
+            row: { ...row, current },
             proposed,
             skipped: false,
             noChange:
@@ -180,11 +215,13 @@ async function onParse(): Promise<void> {
           }
         } catch (e) {
           return {
-            menuId: menu.id,
-            menuName: menu.name,
-            venueName: menu.venueName,
-            current: menu.serving_times ?? [],
-            proposed: { serving_times: [], clarification_needed: false, clarification_message: null },
+            menuId: row.menuId,
+            row,
+            proposed: {
+              serving_times: [],
+              clarification_needed: false,
+              clarification_message: null,
+            },
             error: e instanceof ApiError ? e.message : 'Network error',
             skipped: true,
             noChange: false,
@@ -193,8 +230,8 @@ async function onParse(): Promise<void> {
       }),
     )
     results.push(...batchResults)
-    parseProgress.value = { done: results.length, total: targetList.length }
-    if (i + BATCH < targetList.length) await new Promise((r) => setTimeout(r, 400))
+    parseProgress.value = { done: results.length, total: list.length }
+    if (i + BATCH < list.length) await new Promise((r) => setTimeout(r, 400))
   }
 
   previews.value = results
@@ -231,10 +268,7 @@ const allNoChange = computed(
   () =>
     previews.value.length > 0 &&
     previews.value.every(
-      (p) =>
-        !p.error &&
-        !p.proposed.clarification_needed &&
-        p.noChange,
+      (p) => !p.error && !p.proposed.clarification_needed && p.noChange,
     ),
 )
 
@@ -252,7 +286,6 @@ async function onApply(): Promise<void> {
   applying.value = true
   let failed = 0
   try {
-    // 3 parallel writes (was 5) — see VenuesTab note on MySQL gap-lock deadlocks.
     const BATCH = 3
     for (let i = 0; i < toApply.length; i += BATCH) {
       const batch = toApply.slice(i, i + BATCH)
@@ -273,7 +306,7 @@ async function onApply(): Promise<void> {
   }
 }
 
-/* ---- compact display helpers ---- */
+/* ---- display helpers ---- */
 function weekdaySlots(times: ServingTime[]) {
   return times.filter((t) => t.type === 'weekday')
 }
@@ -295,12 +328,11 @@ function timeRange(s: ServingTime): string {
         Set serving times for menus
       </h3>
       <p class="menus__subtitle">
-        Select menus, describe when they're available in plain English, then review &amp; apply.
-        Menu hours apply across all venues of this brand.
+        Each venue has its own menus. Pick a venue or work across all of them.
       </p>
     </header>
 
-    <ListSkeleton v-if="loading" :rows="3" />
+    <ListSkeleton v-if="loading" :rows="4" />
 
     <div v-else-if="loadError" class="state state--error">
       <strong>Couldn't load menus.</strong>
@@ -308,12 +340,40 @@ function timeRange(s: ServingTime): string {
       <AppButton variant="secondary" size="sm" @click="load">Try again</AppButton>
     </div>
 
-    <div v-else-if="!menus.length" class="state">
+    <div v-else-if="!rows.length" class="state">
       <h3>No menus yet</h3>
-      <p>No venues have menus configured yet. Add menus through a venue's detail page.</p>
+      <p>None of this brand's venues have any menus configured.</p>
     </div>
 
     <template v-else>
+      <!-- Venue filter pills -->
+      <div class="venue-filter" role="tablist" aria-label="Filter by venue">
+        <button
+          type="button"
+          class="pill"
+          :class="{ 'pill--active': venueFilter === 'all' }"
+          role="tab"
+          :aria-selected="venueFilter === 'all'"
+          @click="venueFilter = 'all'"
+        >
+          All venues
+          <span class="pill__count">{{ rows.length }}</span>
+        </button>
+        <button
+          v-for="v in venueOptions"
+          :key="v.id"
+          type="button"
+          class="pill"
+          :class="{ 'pill--active': venueFilter === v.id }"
+          role="tab"
+          :aria-selected="venueFilter === v.id"
+          @click="venueFilter = v.id"
+        >
+          {{ v.name }}
+          <span class="pill__count">{{ v.count }}</span>
+        </button>
+      </div>
+
       <!-- Menus table -->
       <section class="card">
         <header class="card__head">
@@ -322,62 +382,53 @@ function timeRange(s: ServingTime): string {
               type="checkbox"
               :checked="allChecked"
               :indeterminate.prop="someChecked"
+              :disabled="!filteredRows.length"
               @change="toggleAll"
             />
             <span class="check__box"></span>
             <span class="check__label">
               {{
                 allChecked
-                  ? `All ${menus.length} selected`
-                  : selectedIds.size > 0
-                  ? `${selectedIds.size} of ${menus.length} selected`
+                  ? `All ${filteredRows.length} selected`
+                  : visibleSelectedCount > 0
+                  ? `${visibleSelectedCount} of ${filteredRows.length} selected`
                   : `Select menus to configure`
               }}
             </span>
           </label>
         </header>
 
-        <ul class="rows">
+        <ul v-if="filteredRows.length" class="rows">
           <li
-            v-for="m in menus"
-            :key="m.id"
+            v-for="r in filteredRows"
+            :key="r.menuId"
             class="row"
-            :class="{ 'row--selected': selectedIds.has(m.id) }"
-            @click="toggle(m.id)"
+            :class="{ 'row--selected': selectedIds.has(r.menuId) }"
+            @click="toggle(r.menuId)"
           >
             <label class="check check--row" @click.stop>
               <input
                 type="checkbox"
-                :checked="selectedIds.has(m.id)"
-                @change="toggle(m.id)"
+                :checked="selectedIds.has(r.menuId)"
+                @change="toggle(r.menuId)"
               />
               <span class="check__box"></span>
             </label>
             <div class="row__main">
-              <RouterLink
-                :to="`/brands/${brandId}/venues/${m.venue_id}/menus/${m.id}`"
-                class="row__name"
-                @click.stop
-              >
-                {{ m.name }}
-              </RouterLink>
-              <span class="row__venue">{{ m.venueName }}</span>
-              <span v-if="m.description" class="row__sub">{{ m.description }}</span>
-              <span
-                v-if="m.active === false"
-                class="row__inactive"
-                title="Menu is currently inactive"
-              >
-                Inactive
+              <span class="row__title">
+                <span class="row__name">{{ r.menuName }}</span>
+                <span class="row__venue-tag">{{ r.venueName }}</span>
+                <span v-if="r.active === false" class="row__inactive">Inactive</span>
               </span>
+              <span v-if="r.description" class="row__sub">{{ r.description }}</span>
             </div>
             <div class="row__hours">
-              <template v-if="(m.serving_times?.length ?? 0) === 0">
+              <template v-if="r.current.length === 0">
                 <span class="row__hours-empty">No hours set</span>
               </template>
               <template v-else>
                 <span
-                  v-for="(s, i) in weekdaySlots(m.serving_times ?? [])"
+                  v-for="(s, i) in weekdaySlots(r.current)"
                   :key="`w-${s.id ?? i}`"
                   class="row__hours-slot"
                 >
@@ -390,7 +441,7 @@ function timeRange(s: ServingTime): string {
                   </span>
                 </span>
                 <span
-                  v-for="s in specialSlots(m.serving_times ?? [])"
+                  v-for="s in specialSlots(r.current)"
                   :key="`s-${s.id}`"
                   class="row__hours-special"
                   :class="s.working ? 'row__hours-special--open' : 'row__hours-special--closed'"
@@ -402,6 +453,7 @@ function timeRange(s: ServingTime): string {
             </div>
           </li>
         </ul>
+        <p v-else class="rows__empty">No menus for this venue yet.</p>
       </section>
 
       <!-- Prompt card -->
@@ -530,8 +582,8 @@ function timeRange(s: ServingTime): string {
               <span v-else class="preview-card__check-spacer"></span>
 
               <h4 class="preview-card__name">
-                {{ p.menuName }}
-                <span class="preview-card__venue">@ {{ p.venueName }}</span>
+                {{ p.row.menuName }}
+                <span class="preview-card__venue-tag">{{ p.row.venueName }}</span>
               </h4>
 
               <span v-if="p.error" class="preview-card__status preview-card__status--error">
@@ -577,7 +629,7 @@ function timeRange(s: ServingTime): string {
             </p>
             <ServingTimesDiff
               v-else
-              :current="p.current"
+              :current="p.row.current"
               :proposed="p.proposed.serving_times"
             />
           </article>
@@ -601,6 +653,51 @@ function timeRange(s: ServingTime): string {
 .menus__title span:first-child { color: var(--primary-accent-100); font-size: 18px; }
 .menus__subtitle { color: var(--grayscale-60); font-size: 13px; }
 
+/* Venue filter pills */
+.venue-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  background: var(--white);
+  border: 1px solid var(--grayscale-20);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--grayscale-80);
+  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+}
+.pill:hover { border-color: var(--primary-accent-40); color: var(--primary-accent-100); }
+.pill--active {
+  background: var(--primary-accent-100);
+  color: var(--white);
+  border-color: var(--primary-accent-100);
+}
+.pill__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  background: var(--grayscale-05);
+  color: var(--grayscale-60);
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  border-radius: 999px;
+}
+.pill--active .pill__count {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--white);
+}
+
+/* Card / list shared styling */
 .card {
   background: var(--white);
   border: 1px solid var(--transparent-05);
@@ -642,8 +739,7 @@ function timeRange(s: ServingTime): string {
 }
 .check input:checked + .check__box::after {
   content: '';
-  width: 10px;
-  height: 5px;
+  width: 10px; height: 5px;
   border-left: 2px solid var(--white);
   border-bottom: 2px solid var(--white);
   transform: rotate(-45deg) translate(1px, -1px);
@@ -654,8 +750,7 @@ function timeRange(s: ServingTime): string {
 }
 .check input:indeterminate + .check__box::after {
   content: '';
-  width: 10px;
-  height: 2px;
+  width: 10px; height: 2px;
   background: var(--white);
 }
 .check__label { font-weight: var(--font-weight-semibold); color: var(--grayscale-100); }
@@ -665,6 +760,13 @@ function timeRange(s: ServingTime): string {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+.rows__empty {
+  margin: 0;
+  padding: 24px;
+  color: var(--grayscale-50);
+  font-style: italic;
+  text-align: center;
 }
 
 .row {
@@ -682,19 +784,27 @@ function timeRange(s: ServingTime): string {
 .row--selected { background: var(--primary-accent-04-transparent); }
 .row--selected:hover { background: var(--primary-accent-07-transparent); }
 
-.row__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.row__main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.row__title { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .row__name {
   font-weight: var(--font-weight-semibold);
   color: var(--grayscale-100);
   font-size: 14px;
 }
-.row__name:hover { color: var(--primary-accent-100); text-decoration: underline; }
-.row__venue { font-size: 11px; color: var(--grayscale-50); font-weight: 500; }
-.row__sub { font-size: 12px; color: var(--grayscale-50); }
+.row__venue-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--primary-accent-100);
+  background: var(--primary-accent-15);
+  border-radius: var(--radius-sm);
+}
 .row__inactive {
   display: inline-flex;
-  align-self: flex-start;
-  margin-top: 2px;
   padding: 2px 6px;
   font-size: 10px;
   text-transform: uppercase;
@@ -704,6 +814,7 @@ function timeRange(s: ServingTime): string {
   color: var(--grayscale-60);
   border-radius: var(--radius-sm);
 }
+.row__sub { font-size: 12px; color: var(--grayscale-50); }
 
 .row__hours {
   display: flex;
@@ -753,6 +864,7 @@ function timeRange(s: ServingTime): string {
   color: var(--status-success);
 }
 
+/* Prompt card */
 .prompt-card {
   background: linear-gradient(
     180deg,
@@ -840,33 +952,6 @@ function timeRange(s: ServingTime): string {
   line-height: 1.5;
 }
 
-.no-changes {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 22px;
-  background: var(--status-success-15);
-  border: 1px solid rgba(68, 171, 11, 0.3);
-  border-radius: var(--radius-md);
-  flex-wrap: wrap;
-}
-.no-changes__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--status-success);
-  color: var(--white);
-  font-weight: var(--font-weight-bold);
-  flex-shrink: 0;
-}
-.no-changes__text { flex: 1; min-width: 240px; }
-.no-changes__text strong { color: var(--status-success); font-size: 14px; }
-.no-changes__text p { color: var(--grayscale-80); font-size: 13px; margin-top: 2px; }
-.no-changes__actions { display: flex; gap: 8px; flex-shrink: 0; }
-
 .preview-card__head {
   display: flex;
   align-items: center;
@@ -877,18 +962,27 @@ function timeRange(s: ServingTime): string {
 }
 .preview-card__check-spacer { width: 18px; }
 .preview-card__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-size: 14px;
   font-weight: var(--font-weight-semibold);
   color: var(--grayscale-100);
   flex: 1;
+  flex-wrap: wrap;
 }
-.preview-card__venue {
-  font-size: 12px;
-  font-weight: normal;
-  color: var(--grayscale-50);
-  margin-left: 4px;
+.preview-card__venue-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--primary-accent-100);
+  background: var(--primary-accent-15);
+  border-radius: var(--radius-sm);
 }
-
 .preview-card__status {
   font-size: 11px;
   font-weight: var(--font-weight-semibold);
@@ -922,6 +1016,33 @@ function timeRange(s: ServingTime): string {
 }
 .banner--warning strong { color: var(--status-activating); }
 .banner span { color: var(--grayscale-80); font-size: 13px; }
+
+.no-changes {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  background: var(--status-success-15);
+  border: 1px solid rgba(68, 171, 11, 0.3);
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+.no-changes__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--status-success);
+  color: var(--white);
+  font-weight: var(--font-weight-bold);
+  flex-shrink: 0;
+}
+.no-changes__text { flex: 1; min-width: 240px; }
+.no-changes__text strong { color: var(--status-success); font-size: 14px; }
+.no-changes__text p { color: var(--grayscale-80); font-size: 13px; margin-top: 2px; }
+.no-changes__actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .state {
   display: flex;
