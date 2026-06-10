@@ -110,6 +110,7 @@ class ServingTimesController extends Controller
 
         return response()->json([
             'preview'               => $preview['serving_times'],
+            'should_update'         => $preview['should_update'] ?? true,
             'clarification_needed'  => $preview['clarification_needed'],
             'clarification_message' => $preview['clarification_message'] ?? null,
         ]);

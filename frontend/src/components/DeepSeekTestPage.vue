@@ -27,6 +27,7 @@ interface Row {
 interface PreviewResult {
   row: Row
   serving_times: ServingTime[]
+  should_update: boolean
   clarification_needed: boolean
   clarification_message: string | null
   error?: string
@@ -170,12 +171,13 @@ async function parse() {
       return {
         row,
         serving_times: Array.isArray(data.preview) ? data.preview : (data.preview?.serving_times ?? []),
+        should_update: data.should_update ?? true,
         clarification_needed: data.clarification_needed ?? false,
         clarification_message: data.clarification_message ?? null,
         error: undefined,
       }
     } catch (e: any) {
-      return { row, serving_times: [], clarification_needed: false, clarification_message: null, error: e.message }
+      return { row, serving_times: [], should_update: false, clarification_needed: false, clarification_message: null, error: e.message }
     }
   }
 
@@ -188,7 +190,7 @@ async function parse() {
     if (i + BATCH < parseTargets.length) await new Promise(r => setTimeout(r, 500))
   }
 
-  previews.value = results
+  previews.value = results.filter(p => p.should_update !== false || p.error)
   parsing.value = false
 }
 

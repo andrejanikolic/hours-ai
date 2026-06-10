@@ -13,6 +13,7 @@ class DeepSeekServingTimesParser
 
     private const SCHEMA = <<<'JSON'
     {
+      "should_update": true,
       "clarification_needed": false,
       "clarification_message": null,
       "serving_times": [
@@ -57,6 +58,7 @@ class DeepSeekServingTimesParser
         - For special entries, "date" is required (YYYY-MM-DD); "date_to" is optional for date ranges.
         - Set "working": false for closed periods.
         - If the instruction is ambiguous or cannot be parsed, set clarification_needed to true and explain in clarification_message.
+        - If the instruction clearly refers to a different entity (e.g. "Lunch menu" when you are configuring "Breakfast"), set should_update to false and serving_times to [].
         - Return ONLY a valid JSON object matching this schema — no markdown, no explanation:
 
         PROMPT . self::SCHEMA;
@@ -84,10 +86,12 @@ class DeepSeekServingTimesParser
             ];
         }
 
+        $shouldUpdate        = (bool) ($parsed['should_update'] ?? true);
         $clarificationNeeded = (bool) ($parsed['clarification_needed'] ?? false);
 
         return [
-            'serving_times'         => $this->sanitizeRows($parsed['serving_times'] ?? []),
+            'should_update'         => $shouldUpdate,
+            'serving_times'         => $shouldUpdate ? $this->sanitizeRows($parsed['serving_times'] ?? []) : [],
             'clarification_needed'  => $clarificationNeeded,
             'clarification_message' => $parsed['clarification_message'] ?? null,
         ];
