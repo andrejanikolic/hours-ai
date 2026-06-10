@@ -72,13 +72,18 @@ const counts = computed(() => {
   }
 })
 
-const canPreview = computed(() => selected.value.size > 0 && prompt.value.trim().length > 0 && !parsing.value)
+const targets = computed(() =>
+  selected.value.size > 0
+    ? rows.value.filter(r => selected.value.has(rowKey(r)))
+    : filtered.value
+)
+
+const canPreview = computed(() => prompt.value.trim().length > 0 && !parsing.value && targets.value.length > 0)
 
 const previewBlockedReason = computed(() => {
   if (parsing.value) return null
-  if (!selected.value.size && !prompt.value.trim()) return 'Select rows and enter a prompt'
-  if (!selected.value.size) return 'Select at least one row above'
   if (!prompt.value.trim()) return 'Enter a prompt below'
+  if (!targets.value.length) return 'No rows match the current filter'
   return null
 })
 
@@ -151,7 +156,7 @@ async function parse() {
   applySuccess.value = false
   previews.value = []
 
-  const targets = rows.value.filter(r => selected.value.has(rowKey(r)))
+  const parseTargets = targets.value
 
   const parseOne = async (row: Row): Promise<PreviewResult> => {
     try {
@@ -176,11 +181,11 @@ async function parse() {
 
   const results: PreviewResult[] = []
   const BATCH = 3
-  for (let i = 0; i < targets.length; i += BATCH) {
-    const batch = targets.slice(i, i + BATCH)
+  for (let i = 0; i < parseTargets.length; i += BATCH) {
+    const batch = parseTargets.slice(i, i + BATCH)
     const batchResults = await Promise.all(batch.map(parseOne))
     results.push(...batchResults)
-    if (i + BATCH < targets.length) await new Promise(r => setTimeout(r, 500))
+    if (i + BATCH < parseTargets.length) await new Promise(r => setTimeout(r, 500))
   }
 
   previews.value = results
