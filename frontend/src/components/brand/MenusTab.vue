@@ -42,6 +42,9 @@ const rows = ref<MenuRow[]>([])
 const venueOptions = ref<{ id: number; name: string; count: number }[]>([])
 const loading = ref(true)
 const loadError = ref<string | null>(null)
+const page = ref(1)
+const hasMore = ref(false)
+const loadingMore = ref(false)
 
 /** Selected venue ids for filtering the table. Empty = all venues. */
 const venueFilter = ref<number[]>([])
@@ -53,7 +56,7 @@ const parseProgress = ref<{ done: number; total: number } | null>(null)
 const previews = ref<MenuPreview[]>([])
 const applying = ref(false)
 
-const { list: listVenues } = useVenues()
+const { listPaged: listVenuesPaged } = useVenues()
 const { list: listMenus } = useMenus()
 const { parse: parseHours, replace: replaceHours, list: listServingTimes } =
   useServingTimes()
@@ -107,10 +110,11 @@ onBeforeUnmount(() => {
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = null
+  page.value = 1
   try {
-    const venues = await listVenues(props.brandId)
+    const res = await listVenuesPaged(props.brandId, 1)
     const perVenue = await Promise.all(
-      venues.map((v) =>
+      res.data.map((v) =>
         listMenus(props.brandId, v.id).then((menus) => ({ venue: v, menus })),
       ),
     )
@@ -133,12 +137,45 @@ async function load(): Promise<void> {
     }
     rows.value = flat
     venueOptions.value = venueCounts
+    hasMore.value = res.meta.has_more
     // Start with nothing selected — pick menus, or name them in the prompt.
     selectedIds.value = new Set()
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : 'Network error'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMore(): Promise<void> {
+  loadingMore.value = true
+  try {
+    const res = await listVenuesPaged(props.brandId, page.value + 1)
+    const perVenue = await Promise.all(
+      res.data.map((v) =>
+        listMenus(props.brandId, v.id).then((menus) => ({ venue: v, menus })),
+      ),
+    )
+    for (const { venue, menus } of perVenue) {
+      venueOptions.value.push({ id: venue.id, name: venue.name, count: menus.length })
+      for (const m of menus) {
+        rows.value.push({
+          menuId: m.id,
+          menuName: m.name,
+          description: m.description,
+          active: m.active,
+          venueId: venue.id,
+          venueName: venue.name,
+          current: m.serving_times ?? [],
+        })
+      }
+    }
+    page.value++
+    hasMore.value = res.meta.has_more
+  } catch {
+    // silently fail
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -448,6 +485,11 @@ function timeRange(s: ServingTime): string {
           </li>
         </ul>
         <p v-else class="rows__empty">No menus for this venue yet.</p>
+        <div v-if="hasMore" class="load-more">
+          <AppButton variant="secondary" size="sm" :loading="loadingMore" @click="loadMore">
+            Load more
+          </AppButton>
+        </div>
       </section>
 
       <!-- Prompt card -->
@@ -653,6 +695,7 @@ function timeRange(s: ServingTime): string {
 }
 .menus__title span:first-child { color: var(--primary-accent-100); font-size: 18px; }
 .menus__subtitle { color: var(--grayscale-60); font-size: 13px; }
+.load-more { display: flex; justify-content: center; padding: 12px 0; }
 
 /* Card / list shared styling */
 .card {

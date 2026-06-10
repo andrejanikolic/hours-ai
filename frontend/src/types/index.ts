@@ -109,6 +109,19 @@ export interface ParseResult {
   clarification_message: string | null
 }
 
+export interface PaginationMeta {
+  current_page: number
+  last_page: number
+  per_page: number
+  total: number
+  has_more: boolean
+}
+
+export interface Paginated<T> {
+  data: T[]
+  meta: PaginationMeta
+}
+
 /** Raw shape returned by POST /serving-times/parse. */
 export interface ParseResponseBody {
   preview: ServingTimeInput[]

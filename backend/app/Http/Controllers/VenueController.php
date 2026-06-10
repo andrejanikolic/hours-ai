@@ -12,8 +12,27 @@ use Illuminate\Support\Str;
 
 class VenueController extends Controller
 {
-    public function index(Brand $brand): JsonResponse
+    public function index(Request $request, Brand $brand): JsonResponse
     {
+        $perPage = (int) $request->query('per_page', 0);
+
+        if ($perPage > 0) {
+            $paginator = $brand->venues()
+                ->with('servingTimes')
+                ->paginate($perPage, ['*'], 'page', (int) $request->query('page', 1));
+
+            return response()->json([
+                'data' => $paginator->items(),
+                'meta' => [
+                    'current_page' => $paginator->currentPage(),
+                    'last_page'    => $paginator->lastPage(),
+                    'per_page'     => $paginator->perPage(),
+                    'total'        => $paginator->total(),
+                    'has_more'     => $paginator->hasMorePages(),
+                ],
+            ]);
+        }
+
         return response()->json($brand->venues()->with('servingTimes')->get());
     }
 

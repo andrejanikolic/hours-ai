@@ -31,6 +31,9 @@ interface VenuePreview {
 const venues = ref<Venue[]>([])
 const loading = ref(true)
 const loadError = ref<string | null>(null)
+const page = ref(1)
+const hasMore = ref(false)
+const loadingMore = ref(false)
 
 const selectedIds = ref<Set<number>>(new Set())
 const prompt = ref('')
@@ -41,7 +44,7 @@ const previews = ref<VenuePreview[]>([])
 
 const applying = ref(false)
 
-const { list: listVenues } = useVenues()
+const { listPaged: listVenuesPaged } = useVenues()
 const { parse: parseHours, replace: replaceHours, list: listServingTimes } =
   useServingTimes()
 const toast = useToast()
@@ -102,14 +105,31 @@ onBeforeUnmount(dispose)
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = null
+  page.value = 1
   try {
-    venues.value = await listVenues(props.brandId)
+    const res = await listVenuesPaged(props.brandId, 1)
+    venues.value = res.data
+    hasMore.value = res.meta.has_more
     // Start with nothing selected — the operator picks venues, or just names them in the prompt.
     selectedIds.value = new Set()
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : 'Network error'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMore(): Promise<void> {
+  loadingMore.value = true
+  try {
+    const res = await listVenuesPaged(props.brandId, page.value + 1)
+    venues.value = [...venues.value, ...res.data]
+    page.value++
+    hasMore.value = res.meta.has_more
+  } catch {
+    // silently fail — user can retry
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -413,6 +433,11 @@ function timeRange(s: ServingTime): string {
             </div>
           </li>
         </ul>
+        <div v-if="hasMore" class="load-more">
+          <AppButton variant="secondary" size="sm" :loading="loadingMore" @click="loadMore">
+            Load more
+          </AppButton>
+        </div>
       </section>
 
       <!-- Prompt card (hidden once previews are showing) -->
@@ -620,6 +645,7 @@ function timeRange(s: ServingTime): string {
 }
 .venues__title span:first-child { color: var(--primary-accent-100); font-size: 18px; }
 .venues__subtitle { color: var(--grayscale-60); font-size: 13px; }
+.load-more { display: flex; justify-content: center; padding: 12px 0; }
 
 /* Card shared shell */
 .card {

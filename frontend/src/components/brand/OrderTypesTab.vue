@@ -45,6 +45,9 @@ interface RowPreview {
 const rows = ref<Row[]>([])
 const loading = ref(true)
 const loadError = ref<string | null>(null)
+const page = ref(1)
+const hasMore = ref(false)
+const loadingMore = ref(false)
 
 const orderTypeFilter = ref<string | 'all'>('all')
 /** Selected venue ids for filtering. Empty = all venues. */
@@ -57,7 +60,7 @@ const parseProgress = ref<{ done: number; total: number } | null>(null)
 const previews = ref<RowPreview[]>([])
 const applying = ref(false)
 
-const { list: listVenues } = useVenues()
+const { listPaged: listVenuesPaged } = useVenues()
 const { list: listVenueOrderTypes } = useVenueOrderTypes()
 const {
   parse: parseHours,
@@ -113,10 +116,11 @@ onBeforeUnmount(() => {
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = null
+  page.value = 1
   try {
-    const venues = await listVenues(props.brandId)
+    const res = await listVenuesPaged(props.brandId, 1)
     const perVenue = await Promise.all(
-      venues.map((v) =>
+      res.data.map((v) =>
         listVenueOrderTypes(props.brandId, v.id).then((ots) => ({
           venue: v,
           ots,
@@ -140,12 +144,46 @@ async function load(): Promise<void> {
       }
     }
     rows.value = result
+    hasMore.value = res.meta.has_more
     // Start with nothing selected — pick channels, or name a venue in the prompt.
     selectedKeys.value = new Set()
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : 'Network error'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMore(): Promise<void> {
+  loadingMore.value = true
+  try {
+    const res = await listVenuesPaged(props.brandId, page.value + 1)
+    const perVenue = await Promise.all(
+      res.data.map((v) =>
+        listVenueOrderTypes(props.brandId, v.id).then((ots) => ({ venue: v, ots })),
+      ),
+    )
+    for (const { venue, ots } of perVenue) {
+      for (const ot of ots) {
+        if (!DELIVERY_SLUGS.includes(ot.slug)) continue
+        rows.value.push({
+          rowKey: `${venue.id}-${ot.id}`,
+          venueId: venue.id,
+          venueName: venue.name,
+          orderTypeId: ot.id,
+          orderTypeName: ot.name,
+          orderTypeSlug: ot.slug,
+          venueOrderTypeId: ot.venue_order_type_id,
+          current: ot.serving_times,
+        })
+      }
+    }
+    page.value++
+    hasMore.value = res.meta.has_more
+  } catch {
+    // silently fail
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -540,6 +578,11 @@ function rowLabel(p: RowPreview): string {
           </li>
         </ul>
         <p v-else class="rows__empty">No channels for this filter.</p>
+        <div v-if="hasMore" class="load-more">
+          <AppButton variant="secondary" size="sm" :loading="loadingMore" @click="loadMore">
+            Load more
+          </AppButton>
+        </div>
       </section>
 
       <!-- Prompt card -->
@@ -744,6 +787,7 @@ function rowLabel(p: RowPreview): string {
 .ot__title span:first-child { color: var(--primary-accent-100); font-size: 18px; }
 .ot__subtitle { color: var(--grayscale-60); font-size: 13px; }
 .ot__subtitle strong { color: var(--grayscale-100); font-weight: var(--font-weight-semibold); }
+.load-more { display: flex; justify-content: center; padding: 12px 0; }
 
 /* Channel filter pills */
 .channel-filter {

@@ -1,5 +1,5 @@
 import { api } from './useApi'
-import type { Venue } from '../types'
+import type { Paginated, Venue } from '../types'
 
 export interface VenueCreateBody {
   name: string
@@ -26,6 +26,8 @@ export interface VenueUpdateBody {
 export function useVenues() {
   return {
     list: (brandId: number) => api.get<Venue[]>(`/brands/${brandId}/venues`),
+    listPaged: (brandId: number, page: number, perPage = 20) =>
+      api.get<Paginated<Venue>>(`/brands/${brandId}/venues`, { page, per_page: perPage }),
     get: (brandId: number, venueId: number) =>
       api.get<Venue>(`/brands/${brandId}/venues/${venueId}`),
     create: (brandId: number, body: VenueCreateBody) =>
