@@ -421,7 +421,7 @@ onMounted(fetchAll)
 
       <div class="prompt-card__footer">
         <span class="prompt-examples">
-          Try:
+          Quick Prompts:
           <template v-for="(s, i) in promptSuggestions" :key="s.label">
             <span v-if="i > 0" class="prompt-examples__sep">·</span>
             <em @click="prompt = s.text">{{ s.label }}</em>

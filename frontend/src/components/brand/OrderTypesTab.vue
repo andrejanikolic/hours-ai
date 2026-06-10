@@ -6,11 +6,13 @@ import { useServingTimes } from '../../composables/useServingTimes'
 import { useToast } from '../../composables/useToast'
 import { ApiError } from '../../composables/useApi'
 import { sameSchedule } from '../../composables/scheduleCompare'
+import { promptMentions } from '../../composables/promptTargets'
 import type { ParseResult, ServingTime } from '../../types'
 
 import AppButton from '../shared/AppButton.vue'
 import AppTextarea from '../shared/AppTextarea.vue'
 import ListSkeleton from '../shared/ListSkeleton.vue'
+import VoiceButton from '../shared/VoiceButton.vue'
 import DayChips from '../serving-times/DayChips.vue'
 import ServingTimesDiff from '../serving-times/ServingTimesDiff.vue'
 
@@ -135,7 +137,8 @@ async function load(): Promise<void> {
       }
     }
     rows.value = result
-    selectedKeys.value = new Set(result.map((r) => r.rowKey))
+    // Start with nothing selected — pick channels, or name a venue in the prompt.
+    selectedKeys.value = new Set()
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : 'Network error'
   } finally {
@@ -188,15 +191,37 @@ function toggle(key: string): void {
   selectedKeys.value = next
 }
 
+/**
+ * Channels named in the prompt. "delivery"/"catering" are generic on this tab,
+ * so detection is anchored on a venue name ("Downtown …"); it then narrows to a
+ * single channel only if the prompt also says "catering" or "delivery".
+ */
+const detectedTargets = computed(() => {
+  const p = prompt.value
+  if (!p.trim()) return []
+  const venueRows = filteredRows.value.filter((r) => promptMentions(p, r.venueName))
+  if (!venueRows.length) return []
+  const wantsCatering = promptMentions(p, 'catering')
+  const wantsDelivery = promptMentions(p, 'delivery') && !wantsCatering
+  return venueRows.filter((r) => {
+    if (wantsCatering) return r.orderTypeSlug === 'catering-delivery'
+    if (wantsDelivery) return r.orderTypeSlug === 'delivery'
+    return true
+  })
+})
+
+// A venue named in the prompt wins over the checkboxes; otherwise use selection.
 const targets = computed(() =>
-  filteredRows.value.filter((r) => selectedKeys.value.has(r.rowKey)),
+  detectedTargets.value.length
+    ? detectedTargets.value
+    : filteredRows.value.filter((r) => selectedKeys.value.has(r.rowKey)),
 )
 const canParse = computed(
   () => prompt.value.trim().length > 0 && !parsing.value && targets.value.length > 0,
 )
 const parseBlockedReason = computed(() => {
   if (!prompt.value.trim()) return 'Type a prompt above'
-  if (!targets.value.length) return 'Select at least one channel'
+  if (!targets.value.length) return 'Select channels, or name a venue in your prompt'
   return null
 })
 
@@ -429,7 +454,7 @@ function rowLabel(p: RowPreview): string {
                   ? `All ${filteredRows.length} selected`
                   : visibleSelectedCount > 0
                   ? `${visibleSelectedCount} of ${filteredRows.length} selected`
-                  : `Select delivery channels to configure`
+                  : `Select channels — or just name a venue in your prompt`
               }}
             </span>
           </label>
@@ -520,8 +545,15 @@ function rowLabel(p: RowPreview): string {
           :disabled="parsing"
         />
 
+        <p v-if="detectedTargets.length" class="auto-detect">
+          <span class="auto-detect__icon" aria-hidden="true">✦</span>
+          Detected from your prompt — will apply to
+          <strong>{{ detectedTargets.map((r) => `${r.venueName} · ${r.orderTypeName}`).join(', ') }}</strong>
+          <span class="auto-detect__note">· table selection ignored</span>
+        </p>
+
         <div class="templates" aria-label="Prompt templates">
-          <span class="templates__label">Try:</span>
+          <span class="templates__label">Quick Prompts:</span>
           <template v-for="(t, i) in PROMPT_TEMPLATES" :key="t.label">
             <span v-if="i > 0" class="templates__sep" aria-hidden="true">·</span>
             <button
@@ -536,6 +568,7 @@ function rowLabel(p: RowPreview): string {
         </div>
 
         <div class="prompt-card__actions">
+          <VoiceButton v-model="prompt" :disabled="parsing" class="prompt-card__voice" />
           <span v-if="parseBlockedReason" class="prompt-card__blocked">
             ← {{ parseBlockedReason }}
           </span>
@@ -938,6 +971,26 @@ function rowLabel(p: RowPreview): string {
   gap: 12px;
 }
 .prompt-card__blocked { color: var(--status-activating); font-size: 12px; font-weight: var(--font-weight-semibold); }
+/* Voice button sits at the far left of the actions row; the rest stays right. */
+.prompt-card__voice { margin-right: auto; }
+
+/* Auto-detected targets banner */
+.auto-detect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--primary-accent-04-transparent);
+  border: 1px solid var(--primary-accent-15);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--grayscale-80);
+}
+.auto-detect__icon { color: var(--primary-accent-100); }
+.auto-detect strong { color: var(--primary-accent-100); font-weight: var(--font-weight-semibold); }
+.auto-detect__note { color: var(--grayscale-50); font-size: 12px; }
 
 .templates {
   display: flex;

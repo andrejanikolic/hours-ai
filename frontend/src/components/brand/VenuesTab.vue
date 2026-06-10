@@ -6,11 +6,13 @@ import { useServingTimes } from '../../composables/useServingTimes'
 import { useToast } from '../../composables/useToast'
 import { ApiError } from '../../composables/useApi'
 import { sameSchedule } from '../../composables/scheduleCompare'
+import { promptMentions } from '../../composables/promptTargets'
 import type { ParseResult, ServingTime, Venue } from '../../types'
 
 import AppButton from '../shared/AppButton.vue'
 import AppTextarea from '../shared/AppTextarea.vue'
 import ListSkeleton from '../shared/ListSkeleton.vue'
+import VoiceButton from '../shared/VoiceButton.vue'
 import DayChips from '../serving-times/DayChips.vue'
 import ServingTimesDiff from '../serving-times/ServingTimesDiff.vue'
 
@@ -102,8 +104,8 @@ async function load(): Promise<void> {
   loadError.value = null
   try {
     venues.value = await listVenues(props.brandId)
-    // Preselect every venue — operator's natural intent on this tab is "configure all of them".
-    selectedIds.value = new Set(venues.value.map((v) => v.id))
+    // Start with nothing selected — the operator picks venues, or just names them in the prompt.
+    selectedIds.value = new Set()
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : 'Network error'
   } finally {
@@ -132,13 +134,24 @@ function toggle(id: number): void {
   selectedIds.value = next
 }
 
-const targets = computed(() => venues.value.filter((v) => selectedIds.value.has(v.id)))
+/** Venues named directly in the prompt (e.g. "Downtown open 9–5"). */
+const detectedTargets = computed(() => {
+  if (!prompt.value.trim()) return []
+  return venues.value.filter((v) => promptMentions(prompt.value, v.name))
+})
+
+// A name in the prompt wins over the checkboxes; otherwise fall back to selection.
+const targets = computed(() =>
+  detectedTargets.value.length
+    ? detectedTargets.value
+    : venues.value.filter((v) => selectedIds.value.has(v.id)),
+)
 const canParse = computed(
   () => prompt.value.trim().length > 0 && !parsing.value && targets.value.length > 0,
 )
 const parseBlockedReason = computed(() => {
   if (!prompt.value.trim()) return 'Type a prompt above'
-  if (!targets.value.length) return 'Select at least one venue'
+  if (!targets.value.length) return 'Select venues, or name them in your prompt'
   return null
 })
 
@@ -334,7 +347,7 @@ function timeRange(s: ServingTime): string {
                   ? `All ${venues.length} selected`
                   : selectedIds.size > 0
                   ? `${selectedIds.size} of ${venues.length} selected`
-                  : `Select venues to configure`
+                  : `Select venues — or just name them in your prompt`
               }}
             </span>
           </label>
@@ -425,8 +438,15 @@ function timeRange(s: ServingTime): string {
           :disabled="parsing"
         />
 
+        <p v-if="detectedTargets.length" class="auto-detect">
+          <span class="auto-detect__icon" aria-hidden="true">✦</span>
+          Detected from your prompt — will apply to
+          <strong>{{ detectedTargets.map((v) => v.name).join(', ') }}</strong>
+          <span class="auto-detect__note">· table selection ignored</span>
+        </p>
+
         <div class="templates" aria-label="Prompt templates">
-          <span class="templates__label">Try:</span>
+          <span class="templates__label">Quick Prompts:</span>
           <template v-for="(t, i) in PROMPT_TEMPLATES" :key="t.label">
             <span v-if="i > 0" class="templates__sep" aria-hidden="true">·</span>
             <button
@@ -441,6 +461,7 @@ function timeRange(s: ServingTime): string {
         </div>
 
         <div class="prompt-card__actions">
+          <VoiceButton v-model="prompt" :disabled="parsing" class="prompt-card__voice" />
           <span v-if="parseBlockedReason" class="prompt-card__blocked">
             ← {{ parseBlockedReason }}
           </span>
@@ -779,6 +800,26 @@ function timeRange(s: ServingTime): string {
   gap: 12px;
 }
 .prompt-card__blocked { color: var(--status-activating); font-size: 12px; font-weight: var(--font-weight-semibold); }
+/* Voice button sits at the far left of the actions row; the rest stays right. */
+.prompt-card__voice { margin-right: auto; }
+
+/* Auto-detected targets banner */
+.auto-detect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--primary-accent-04-transparent);
+  border: 1px solid var(--primary-accent-15);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--grayscale-80);
+}
+.auto-detect__icon { color: var(--primary-accent-100); }
+.auto-detect strong { color: var(--primary-accent-100); font-weight: var(--font-weight-semibold); }
+.auto-detect__note { color: var(--grayscale-50); font-size: 12px; }
 
 .templates {
   display: flex;

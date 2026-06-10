@@ -6,6 +6,7 @@ import { ApiError } from '../../composables/useApi'
 import type { ParentType, ParseResult, ServingTime } from '../../types'
 import AppButton from '../shared/AppButton.vue'
 import AppTextarea from '../shared/AppTextarea.vue'
+import VoiceButton from '../shared/VoiceButton.vue'
 import ConfirmDelete from '../shared/ConfirmDelete.vue'
 import ServingTimesDiff from './ServingTimesDiff.vue'
 
@@ -143,6 +144,7 @@ async function onApplyConfirm(): Promise<void> {
       />
 
       <div class="card__actions">
+        <VoiceButton v-model="promptText" :disabled="parsing" class="card__voice" />
         <AppButton data-testid="hours-parse-btn" variant="primary" :loading="parsing" :disabled="!canParse" @click="onParse">
           Parse with HoursAI
         </AppButton>
@@ -238,8 +240,12 @@ async function onApplyConfirm(): Promise<void> {
 
 .card__actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 12px;
 }
+/* Voice button sits at the far left of the actions row; Parse stays right. */
+.card__voice { margin-right: auto; }
 
 .apply-row {
   display: flex;
