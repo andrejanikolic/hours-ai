@@ -157,13 +157,17 @@ class ServingTimesController extends Controller
             'updated_at'  => $now,
         ], $data['serving_times']);
 
+        // Auto-retry on InnoDB deadlocks. The bulk-replace UI fires multiple
+        // /serving-times/replace calls in parallel, which causes overlapping
+        // gap locks on (parent_type, parent_id). Laravel re-runs the closure
+        // up to N times when MySQL returns SQLSTATE 40001 (deadlock).
         DB::transaction(function () use ($data, $rows) {
             ServingTime::where('parent_type', $data['parent_type'])
                 ->where('parent_id', $data['parent_id'])
                 ->delete();
 
             DB::table('serving_times')->insert($rows);
-        });
+        }, 3);
 
         $result = ServingTime::where('parent_type', $data['parent_type'])
             ->where('parent_id', $data['parent_id'])

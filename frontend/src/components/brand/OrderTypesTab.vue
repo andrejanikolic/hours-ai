@@ -285,7 +285,8 @@ async function onApply(): Promise<void> {
   applying.value = true
   let failed = 0
   try {
-    const BATCH = 5
+    // 3 parallel writes (was 5) — see VenuesTab note on MySQL gap-lock deadlocks.
+    const BATCH = 3
     for (let i = 0; i < toApply.length; i += BATCH) {
       const batch = toApply.slice(i, i + BATCH)
       const results = await Promise.allSettled(

@@ -247,7 +247,10 @@ async function onApply(): Promise<void> {
   applying.value = true
   let failed = 0
   try {
-    const BATCH = 5
+    // 3 parallel writes — smaller than the 5 we used before, to reduce
+    // MySQL gap-lock collisions on serving_times. Backend also auto-retries
+    // on deadlock, but lowering concurrency makes that path rare.
+    const BATCH = 3
     for (let i = 0; i < toApply.length; i += BATCH) {
       const batch = toApply.slice(i, i + BATCH)
       const results = await Promise.allSettled(
