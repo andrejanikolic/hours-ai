@@ -1,80 +1,140 @@
+/* HoursAI — design tokens mirrored from PAR theme */
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --black: #000000;
+  --white: #ffffff;
+
+  --primary-accent-100: #0a3450;
+  --primary-accent-80:  #3b5d73;
+  --primary-accent-70:  #547184;
+  --primary-accent-60:  #6c8596;
+  --primary-accent-40:  #9daeb9;
+  --primary-accent-15:  #dae1e5;
+  --primary-accent-05:  #f3f5f6;
+  --primary-accent-04-transparent: rgba(10, 52, 80, 0.04);
+  --primary-accent-07-transparent: rgba(10, 52, 80, 0.07);
+
+  --grayscale-100: #141414;
+  --grayscale-80:  #333333;
+  --grayscale-60:  #666666;
+  --grayscale-50:  #808080;
+  --grayscale-40:  #999999;
+  --grayscale-30:  #b3b3b3;
+  --grayscale-20:  #cccccc;
+  --grayscale-10:  #e6e6e6;
+  --grayscale-05:  #f2f2f2;
+
+  --transparent-15: rgba(0, 0, 0, 0.15);
+  --transparent-10: rgba(0, 0, 0, 0.10);
+  --transparent-07: rgba(0, 0, 0, 0.07);
+  --transparent-05: rgba(0, 0, 0, 0.05);
+  --transparent-03: rgba(0, 0, 0, 0.03);
+
+  --status-error:     #ff3b30;
+  --status-error-80:  #ff6259;
+  --status-success:   #44ab0b;
+  --status-success-15:#e3f2da;
+  --status-activating:#ffa800;
+  --status-warning-15:#fff2d9;
+  --status-warning-30:#ffe5b3;
+  --status-info:      #007aff;
+  --status-info-15:   #d9ebff;
+  --status-info-30:   #b3d7ff;
+
+  --shadow-sm:    0 1px 1px var(--transparent-15);
+  --shadow-card:  0 0 0 1px var(--transparent-05), 0 2px 5px var(--transparent-05);
+  --shadow-modal: 0 0 0 1px var(--transparent-05), 0 5px 20px var(--transparent-10);
+  --focus-ring:   0 0 0 2px rgba(10, 52, 80, 0.6);
+  --error-ring:   0 0 0 1.5px var(--status-error);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --font-weight-normal:   400;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  --bg-page: var(--grayscale-05);
+
+  color-scheme: light;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-page);
+  color: var(--grayscale-100);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               Helvetica, Arial, sans-serif;
+  font-size: 14px;
   line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  font-weight: var(--font-weight-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-.card {
-  padding: 2em;
+  text-rendering: optimizeLegibility;
 }
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  min-height: 100vh;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  color: var(--grayscale-100);
+}
+
+h1 { font-size: 24px; line-height: 1.25; }
+h2 { font-size: 20px; line-height: 1.3; }
+h3 { font-size: 16px; line-height: 1.4; }
+
+p { margin: 0; }
+
+a {
+  color: var(--primary-accent-100);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
 }
