@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useVenues } from '../../composables/useVenues'
 import { useMenus } from '../../composables/useMenus'
 import { useServingTimes } from '../../composables/useServingTimes'
@@ -13,6 +13,7 @@ import AppButton from '../shared/AppButton.vue'
 import AppTextarea from '../shared/AppTextarea.vue'
 import ListSkeleton from '../shared/ListSkeleton.vue'
 import VoiceButton from '../shared/VoiceButton.vue'
+import VenueFilter from '../shared/VenueFilter.vue'
 import DayChips from '../serving-times/DayChips.vue'
 import ServingTimesDiff from '../serving-times/ServingTimesDiff.vue'
 
@@ -42,51 +43,10 @@ const venueOptions = ref<{ id: number; name: string; count: number }[]>([])
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
-const venueFilter = ref<number | 'all'>('all')
+/** Selected venue ids for filtering the table. Empty = all venues. */
+const venueFilter = ref<number[]>([])
 const selectedIds = ref<Set<number>>(new Set())
 const prompt = ref('')
-
-/* ---- venue filter dropdown (searchable) ---- */
-const filterOpen = ref(false)
-const filterSearch = ref('')
-const filterRoot = ref<HTMLElement | null>(null)
-const searchInput = ref<HTMLInputElement | null>(null)
-
-const selectedVenue = computed(() =>
-  venueFilter.value === 'all'
-    ? null
-    : venueOptions.value.find((v) => v.id === venueFilter.value) ?? null,
-)
-const selectedVenueLabel = computed(() => selectedVenue.value?.name ?? 'All venues')
-const selectedVenueCount = computed(() =>
-  venueFilter.value === 'all' ? rows.value.length : selectedVenue.value?.count ?? 0,
-)
-
-const filteredVenueOptions = computed(() => {
-  const q = filterSearch.value.trim().toLowerCase()
-  if (!q) return venueOptions.value
-  return venueOptions.value.filter((v) => v.name.toLowerCase().includes(q))
-})
-
-function toggleFilter(): void {
-  filterOpen.value = !filterOpen.value
-  if (filterOpen.value) {
-    filterSearch.value = ''
-    nextTick(() => searchInput.value?.focus())
-  }
-}
-
-function selectVenue(id: number | 'all'): void {
-  venueFilter.value = id
-  filterOpen.value = false
-  filterSearch.value = ''
-}
-
-function onDocClick(e: MouseEvent): void {
-  if (filterOpen.value && filterRoot.value && !filterRoot.value.contains(e.target as Node)) {
-    filterOpen.value = false
-  }
-}
 
 const parsing = ref(false)
 const parseProgress = ref<{ done: number; total: number } | null>(null)
@@ -135,7 +95,6 @@ onMounted(() => {
       placeholderIdx.value = (placeholderIdx.value + 1) % PROMPT_EXAMPLES.length
     }
   }, 4000)
-  document.addEventListener('click', onDocClick)
 })
 
 onBeforeUnmount(() => {
@@ -143,7 +102,6 @@ onBeforeUnmount(() => {
     window.clearInterval(placeholderTimer)
     placeholderTimer = null
   }
-  document.removeEventListener('click', onDocClick)
 })
 
 async function load(): Promise<void> {
@@ -184,11 +142,11 @@ async function load(): Promise<void> {
   }
 }
 
-const filteredRows = computed(() =>
-  venueFilter.value === 'all'
-    ? rows.value
-    : rows.value.filter((r) => r.venueId === venueFilter.value),
-)
+const filteredRows = computed(() => {
+  if (!venueFilter.value.length) return rows.value
+  const set = new Set(venueFilter.value)
+  return rows.value.filter((r) => set.has(r.venueId))
+})
 
 const visibleSelectedCount = computed(
   () => filteredRows.value.filter((r) => selectedIds.value.has(r.menuId)).length,
@@ -404,69 +362,8 @@ function timeRange(s: ServingTime): string {
     </div>
 
     <template v-else>
-      <!-- Venue filter (searchable dropdown) -->
-      <div ref="filterRoot" class="venue-filter">
-        <div class="vselect" :class="{ 'vselect--open': filterOpen }">
-          <button
-            type="button"
-            class="vselect__trigger"
-            aria-haspopup="listbox"
-            :aria-expanded="filterOpen"
-            @click="toggleFilter"
-          >
-            <span class="vselect__value">{{ selectedVenueLabel }}</span>
-            <span class="vselect__count">{{ selectedVenueCount }}</span>
-            <span class="vselect__chev" aria-hidden="true">▾</span>
-          </button>
-
-          <div v-if="filterOpen" class="vselect__menu" role="listbox">
-            <div class="vselect__search">
-              <span class="vselect__search-icon" aria-hidden="true">⌕</span>
-              <input
-                ref="searchInput"
-                v-model="filterSearch"
-                type="text"
-                class="vselect__search-input"
-                placeholder="Search venue…"
-                @keydown.esc="filterOpen = false"
-              />
-            </div>
-            <ul class="vselect__options">
-              <li>
-                <button
-                  type="button"
-                  class="vselect__option"
-                  :class="{ 'vselect__option--active': venueFilter === 'all' }"
-                  role="option"
-                  :aria-selected="venueFilter === 'all'"
-                  @click="selectVenue('all')"
-                >
-                  <span class="vselect__check" aria-hidden="true">✓</span>
-                  <span class="vselect__opt-name">All venues</span>
-                  <span class="vselect__opt-count">{{ rows.length }}</span>
-                </button>
-              </li>
-              <li v-for="v in filteredVenueOptions" :key="v.id">
-                <button
-                  type="button"
-                  class="vselect__option"
-                  :class="{ 'vselect__option--active': venueFilter === v.id }"
-                  role="option"
-                  :aria-selected="venueFilter === v.id"
-                  @click="selectVenue(v.id)"
-                >
-                  <span class="vselect__check" aria-hidden="true">✓</span>
-                  <span class="vselect__opt-name">{{ v.name }}</span>
-                  <span class="vselect__opt-count">{{ v.count }}</span>
-                </button>
-              </li>
-              <li v-if="!filteredVenueOptions.length" class="vselect__empty">
-                No venues match “{{ filterSearch }}”.
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      <!-- Venue filter (searchable, multi-select) -->
+      <VenueFilter :venues="venueOptions" v-model="venueFilter" />
 
       <!-- Menus table -->
       <section class="card">
@@ -760,168 +657,6 @@ function timeRange(s: ServingTime): string {
 }
 .menus__title span:first-child { color: var(--primary-accent-100); font-size: 18px; }
 .menus__subtitle { color: var(--grayscale-60); font-size: 13px; }
-
-/* Venue filter — searchable dropdown */
-.venue-filter {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  position: relative;
-  max-width: 320px;
-}
-.venue-filter__label {
-  font-size: 12px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--grayscale-60);
-}
-
-.vselect { position: relative; }
-
-.vselect__trigger {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 38px;
-  padding: 0 12px;
-  background: var(--white);
-  border: 1px solid var(--grayscale-20);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--grayscale-100);
-  cursor: pointer;
-  transition: border-color 0.12s, box-shadow 0.12s;
-}
-.vselect__trigger:hover { border-color: var(--primary-accent-40); }
-.vselect--open .vselect__trigger {
-  border-color: var(--primary-accent-100);
-  box-shadow: 0 0 0 3px var(--primary-accent-15);
-}
-.vselect__value {
-  flex: 1;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.vselect__count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 18px;
-  padding: 0 6px;
-  background: var(--primary-accent-15);
-  color: var(--primary-accent-100);
-  font-size: 11px;
-  font-weight: var(--font-weight-bold);
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-.vselect__chev {
-  color: var(--grayscale-50);
-  font-size: 12px;
-  transition: transform 0.15s;
-  flex-shrink: 0;
-}
-.vselect--open .vselect__chev { transform: rotate(180deg); }
-
-.vselect__menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: 20;
-  background: var(--white);
-  border: 1px solid var(--grayscale-20);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-card), 0 8px 24px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-}
-
-.vselect__search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  margin: 8px;
-  padding: 0 10px;
-  background: var(--grayscale-05);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s;
-}
-.vselect__search:focus-within {
-  background: var(--white);
-  border-color: var(--primary-accent-100);
-}
-.vselect__search-icon { color: var(--grayscale-40); font-size: 15px; flex-shrink: 0; }
-.vselect__search-input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: 14px;
-  color: var(--grayscale-100);
-  box-shadow: none;
-}
-.vselect__search-input::placeholder { color: var(--grayscale-40); }
-
-.vselect__options {
-  list-style: none;
-  margin: 0;
-  padding: 4px;
-  max-height: 260px;
-  overflow-y: auto;
-}
-.vselect__option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  color: var(--grayscale-100);
-  cursor: pointer;
-  transition: background-color 0.1s;
-}
-.vselect__option:hover { background: var(--grayscale-05); }
-.vselect__option:focus { outline: none; }
-.vselect__option:focus-visible { background: var(--grayscale-05); box-shadow: inset 0 0 0 2px var(--primary-accent-40); }
-.vselect__option--active { background: var(--primary-accent-04-transparent); }
-.vselect__check {
-  width: 14px;
-  color: var(--primary-accent-100);
-  font-weight: var(--font-weight-bold);
-  visibility: hidden;
-  flex-shrink: 0;
-}
-.vselect__option--active .vselect__check { visibility: visible; }
-.vselect__opt-name {
-  flex: 1;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.vselect__option--active .vselect__opt-name { font-weight: var(--font-weight-semibold); }
-.vselect__opt-count {
-  font-size: 12px;
-  font-weight: var(--font-weight-bold);
-  color: var(--grayscale-50);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-.vselect__empty {
-  padding: 12px 10px;
-  color: var(--grayscale-50);
-  font-size: 13px;
-  font-style: italic;
-  text-align: center;
-}
 
 /* Card / list shared styling */
 .card {
