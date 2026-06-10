@@ -387,11 +387,17 @@ function timeRange(s: ServingTime): string {
                 <span
                   v-for="s in specialSlots(v.serving_times ?? [])"
                   :key="`s-${s.id}`"
-                  class="row__hours-special"
-                  :class="s.working ? 'row__hours-special--open' : 'row__hours-special--closed'"
+                  class="row__hours-slot"
                 >
-                  {{ s.date }}<span v-if="s.date_to"> → {{ s.date_to }}</span>
-                  · {{ s.working ? 'Open' : 'Closed' }}
+                  <span class="row__hours-date">
+                    {{ s.date }}<template v-if="s.date_to"> → {{ s.date_to }}</template>
+                  </span>
+                  <span
+                    class="row__hours-time"
+                    :class="s.working ? 'row__hours-time--open' : 'row__hours-time--closed'"
+                  >
+                    {{ s.working ? 'Open' : 'Closed' }}
+                  </span>
                 </span>
               </template>
             </div>
@@ -706,12 +712,15 @@ function timeRange(s: ServingTime): string {
   font-size: 13px;
 }
 .row__hours-slot {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 150px auto;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  column-gap: 12px;
 }
+/* Day-summary pill sits left-aligned in its fixed column instead of stretching. */
+.row__hours-slot :deep(.day-summary) { justify-self: start; }
 .row__hours-time {
+  justify-self: start;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   color: var(--grayscale-100);
@@ -721,23 +730,25 @@ function timeRange(s: ServingTime): string {
   font-weight: var(--font-weight-semibold);
 }
 
-.row__hours-special {
+/* Special-date row: date chip in the day column, status in the time column. */
+.row__hours-date {
+  justify-self: start;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
+  height: 24px;
+  padding: 0 12px;
+  background: var(--grayscale-05);
+  color: var(--grayscale-80);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  width: fit-content;
 }
-.row__hours-special--closed {
-  background: rgba(255, 59, 48, 0.1);
-  color: var(--status-error);
-}
-.row__hours-special--open {
-  background: var(--status-success-15);
+.row__hours-time--open {
   color: var(--status-success);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* Prompt card */

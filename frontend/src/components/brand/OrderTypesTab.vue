@@ -43,6 +43,7 @@ const rows = ref<Row[]>([])
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
+const orderTypeFilter = ref<string | 'all'>('all')
 const selectedKeys = ref<Set<string>>(new Set())
 const prompt = ref('')
 
@@ -142,19 +143,43 @@ async function load(): Promise<void> {
   }
 }
 
+/** Channel filter pills — one per delivery slug actually present, in slug order. */
+const channelOptions = computed(() =>
+  DELIVERY_SLUGS.map((slug) => {
+    const matching = rows.value.filter((r) => r.orderTypeSlug === slug)
+    return matching.length
+      ? { slug, name: matching[0].orderTypeName, count: matching.length }
+      : null
+  }).filter((o): o is { slug: string; name: string; count: number } => o !== null),
+)
+
+const filteredRows = computed(() =>
+  orderTypeFilter.value === 'all'
+    ? rows.value
+    : rows.value.filter((r) => r.orderTypeSlug === orderTypeFilter.value),
+)
+
+const visibleSelectedCount = computed(
+  () => filteredRows.value.filter((r) => selectedKeys.value.has(r.rowKey)).length,
+)
+
 const allChecked = computed(
   () =>
-    rows.value.length > 0 &&
-    rows.value.every((r) => selectedKeys.value.has(r.rowKey)),
+    filteredRows.value.length > 0 &&
+    filteredRows.value.every((r) => selectedKeys.value.has(r.rowKey)),
 )
 const someChecked = computed(
-  () => selectedKeys.value.size > 0 && !allChecked.value,
+  () => visibleSelectedCount.value > 0 && !allChecked.value,
 )
 
 function toggleAll(): void {
-  selectedKeys.value = allChecked.value
-    ? new Set()
-    : new Set(rows.value.map((r) => r.rowKey))
+  const next = new Set(selectedKeys.value)
+  if (allChecked.value) {
+    for (const r of filteredRows.value) next.delete(r.rowKey)
+  } else {
+    for (const r of filteredRows.value) next.add(r.rowKey)
+  }
+  selectedKeys.value = next
 }
 
 function toggle(key: string): void {
@@ -164,7 +189,7 @@ function toggle(key: string): void {
 }
 
 const targets = computed(() =>
-  rows.value.filter((r) => selectedKeys.value.has(r.rowKey)),
+  filteredRows.value.filter((r) => selectedKeys.value.has(r.rowKey)),
 )
 const canParse = computed(
   () => prompt.value.trim().length > 0 && !parsing.value && targets.value.length > 0,
@@ -358,6 +383,34 @@ function rowLabel(p: RowPreview): string {
     </div>
 
     <template v-else>
+      <!-- Channel filter pills -->
+      <div class="channel-filter" role="tablist" aria-label="Filter by channel">
+        <button
+          type="button"
+          class="pill"
+          :class="{ 'pill--active': orderTypeFilter === 'all' }"
+          role="tab"
+          :aria-selected="orderTypeFilter === 'all'"
+          @click="orderTypeFilter = 'all'"
+        >
+          All channels
+          <span class="pill__count">{{ rows.length }}</span>
+        </button>
+        <button
+          v-for="c in channelOptions"
+          :key="c.slug"
+          type="button"
+          class="pill"
+          :class="{ 'pill--active': orderTypeFilter === c.slug }"
+          role="tab"
+          :aria-selected="orderTypeFilter === c.slug"
+          @click="orderTypeFilter = c.slug"
+        >
+          {{ c.name }}
+          <span class="pill__count">{{ c.count }}</span>
+        </button>
+      </div>
+
       <!-- Channels table -->
       <section class="card">
         <header class="card__head">
@@ -366,24 +419,25 @@ function rowLabel(p: RowPreview): string {
               type="checkbox"
               :checked="allChecked"
               :indeterminate.prop="someChecked"
+              :disabled="!filteredRows.length"
               @change="toggleAll"
             />
             <span class="check__box"></span>
             <span class="check__label">
               {{
                 allChecked
-                  ? `All ${rows.length} selected`
-                  : selectedKeys.size > 0
-                  ? `${selectedKeys.size} of ${rows.length} selected`
+                  ? `All ${filteredRows.length} selected`
+                  : visibleSelectedCount > 0
+                  ? `${visibleSelectedCount} of ${filteredRows.length} selected`
                   : `Select delivery channels to configure`
               }}
             </span>
           </label>
         </header>
 
-        <ul class="rows">
+        <ul v-if="filteredRows.length" class="rows">
           <li
-            v-for="r in rows"
+            v-for="r in filteredRows"
             :key="r.rowKey"
             class="row"
             :class="{ 'row--selected': selectedKeys.has(r.rowKey) }"
@@ -427,16 +481,23 @@ function rowLabel(p: RowPreview): string {
                 <span
                   v-for="s in specialSlots(r.current)"
                   :key="`s-${s.id}`"
-                  class="row__hours-special"
-                  :class="s.working ? 'row__hours-special--open' : 'row__hours-special--closed'"
+                  class="row__hours-slot"
                 >
-                  {{ s.date }}<span v-if="s.date_to"> → {{ s.date_to }}</span>
-                  · {{ s.working ? 'Open' : 'Closed' }}
+                  <span class="row__hours-date">
+                    {{ s.date }}<template v-if="s.date_to"> → {{ s.date_to }}</template>
+                  </span>
+                  <span
+                    class="row__hours-time"
+                    :class="s.working ? 'row__hours-time--open' : 'row__hours-time--closed'"
+                  >
+                    {{ s.working ? 'Open' : 'Closed' }}
+                  </span>
                 </span>
               </template>
             </div>
           </li>
         </ul>
+        <p v-else class="rows__empty">No channels for this filter.</p>
       </section>
 
       <!-- Prompt card -->
@@ -635,6 +696,50 @@ function rowLabel(p: RowPreview): string {
 .ot__subtitle { color: var(--grayscale-60); font-size: 13px; }
 .ot__subtitle strong { color: var(--grayscale-100); font-weight: var(--font-weight-semibold); }
 
+/* Channel filter pills */
+.channel-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  background: var(--white);
+  border: 1px solid var(--grayscale-20);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--grayscale-80);
+  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+}
+.pill:hover { border-color: var(--primary-accent-40); color: var(--primary-accent-100); }
+.pill--active {
+  background: var(--primary-accent-100);
+  color: var(--white);
+  border-color: var(--primary-accent-100);
+}
+.pill__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  background: var(--grayscale-05);
+  color: var(--grayscale-60);
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  border-radius: 999px;
+}
+.pill--active .pill__count {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--white);
+}
+
 .card {
   background: var(--white);
   border: 1px solid var(--transparent-05);
@@ -698,6 +803,13 @@ function rowLabel(p: RowPreview): string {
   margin: 0;
   padding: 0;
 }
+.rows__empty {
+  margin: 0;
+  padding: 24px;
+  color: var(--grayscale-50);
+  font-style: italic;
+  text-align: center;
+}
 
 .row {
   display: grid;
@@ -759,12 +871,15 @@ function rowLabel(p: RowPreview): string {
   font-size: 13px;
 }
 .row__hours-slot {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 150px auto;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  column-gap: 12px;
 }
+/* Day-summary pill sits left-aligned in its fixed column instead of stretching. */
+.row__hours-slot :deep(.day-summary) { justify-self: start; }
 .row__hours-time {
+  justify-self: start;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   color: var(--grayscale-100);
@@ -774,23 +889,25 @@ function rowLabel(p: RowPreview): string {
   font-weight: var(--font-weight-semibold);
 }
 
-.row__hours-special {
+/* Special-date row: date chip in the day column, status in the time column. */
+.row__hours-date {
+  justify-self: start;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
+  height: 24px;
+  padding: 0 12px;
+  background: var(--grayscale-05);
+  color: var(--grayscale-80);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  width: fit-content;
 }
-.row__hours-special--closed {
-  background: rgba(255, 59, 48, 0.1);
-  color: var(--status-error);
-}
-.row__hours-special--open {
-  background: var(--status-success-15);
+.row__hours-time--open {
   color: var(--status-success);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* Prompt card */
