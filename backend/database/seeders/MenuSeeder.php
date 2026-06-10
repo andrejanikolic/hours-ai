@@ -34,16 +34,28 @@ class MenuSeeder extends Seeder
         };
 
         // ── Demo Burger ───────────────────────────────────────────────────
-        foreach (['downtown', 'airport-t2'] as $slug) {
-            $id = $venue($slug);
-            if (!$id) continue;
-            $suffix = $slug === 'downtown' ? '' : ' T2';
-            $add($id, 'Breakfast',  'BK Morning Menu' . $suffix, 'Morning items served before 11am.', 1);
-            $add($id, 'All Day',    'BK Main Menu' . $suffix,    'Full menu available all day.',      2);
-            if ($slug === 'downtown') {
-                $add($id, 'Late Night', 'BK Late', 'Reduced menu after 10pm.', 3);
-            }
+        // Original venues keep their internal names (referenced by ServingTimeSeeder)
+        $downtownId = $venue('downtown');
+        if ($downtownId) {
+            $add($downtownId, 'Breakfast',  'BK Morning Menu', 'Morning items served before 11am.', 1);
+            $add($downtownId, 'All Day',    'BK Main Menu',    'Full menu available all day.',      2);
+            $add($downtownId, 'Late Night', 'BK Late',         'Reduced menu after 10pm.',          3);
         }
+        $airportT2Id = $venue('airport-t2');
+        if ($airportT2Id) {
+            $add($airportT2Id, 'Breakfast', 'BK Morning Menu T2', 'Morning items served before 11am.', 1);
+            $add($airportT2Id, 'All Day',   'BK Main Menu T2',    'Full menu available all day.',      2);
+        }
+        // All other Demo Burger venues (seeded by DemoBurgerVenuesSeeder)
+        $demoBurgerId = DB::table('brands')->where('slug', 'demo-burger')->value('id');
+        DB::table('venues')
+            ->where('brand_id', $demoBurgerId)
+            ->whereNotIn('slug', ['downtown', 'airport-t2'])
+            ->pluck('id', 'name')
+            ->each(function (int $id, string $name) use ($add) {
+                $add($id, 'Breakfast',  null, 'Morning items served before 11am.', 1);
+                $add($id, 'All Day',    null, 'Full menu available all day.',      2);
+            });
 
         // ── Pasta House ───────────────────────────────────────────────────
         foreach (['knez-mihailova', 'novi-sad'] as $slug) {

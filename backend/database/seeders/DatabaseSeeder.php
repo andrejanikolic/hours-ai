@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             StoreSeeder::class,
             BrandSeeder::class,
             VenueSeeder::class,
+            DemoBurgerVenuesSeeder::class,
             MenuSeeder::class,
             OrderTypeSeeder::class,
             ServingTimeSeeder::class,
