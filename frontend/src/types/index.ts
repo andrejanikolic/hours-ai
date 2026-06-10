@@ -106,13 +106,12 @@ export interface VenueOrderType {
 export interface ParseResult {
   serving_times: ServingTimeInput[]
   clarification_needed: boolean
+  clarification_message: string | null
 }
 
 /** Raw shape returned by POST /serving-times/parse. */
 export interface ParseResponseBody {
-  preview: {
-    serving_times: ServingTimeInput[]
-    clarification_needed: boolean
-  }
+  preview: ServingTimeInput[]
   clarification_needed: boolean
+  clarification_message: string | null
 }

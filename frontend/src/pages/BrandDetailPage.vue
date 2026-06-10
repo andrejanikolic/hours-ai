@@ -6,10 +6,9 @@ import { ApiError } from '../composables/useApi'
 import type { Brand } from '../types'
 import PageHeader from '../components/shared/PageHeader.vue'
 import TabBar, { type Tab } from '../components/shared/TabBar.vue'
-import BrandInfoTab from '../components/brand/BrandInfoTab.vue'
 import VenuesTab from '../components/brand/VenuesTab.vue'
 import MenusTab from '../components/brand/MenusTab.vue'
-import ServingTimesPanel from '../components/serving-times/ServingTimesPanel.vue'
+import OrderTypesTab from '../components/brand/OrderTypesTab.vue'
 
 const route = useRoute()
 const { get } = useBrands()
@@ -18,13 +17,13 @@ const brandId = computed(() => Number(route.params.brandId))
 const brand = ref<Brand | null>(null)
 const loading = ref(true)
 const loadError = ref<string | null>(null)
-const activeTab = ref('info')
+const activeTab = ref('venues')
 
 const tabs: Tab[] = [
-  { id: 'info', label: 'Info' },
-  { id: 'venues', label: 'Venues' },
-  { id: 'menus', label: 'Menus' },
-  { id: 'serving-times', label: 'Serving Times', badge: true },
+  // Info tab hidden for now — will be rebuilt to show useful serving-times info.
+  { id: 'venues', label: 'Venue Opening Hours' },
+  { id: 'menus', label: 'Menu Serving Times' },
+  { id: 'order-types', label: 'Order Types Delivery Times' },
 ]
 
 onMounted(load)
@@ -41,10 +40,6 @@ async function load(): Promise<void> {
   } finally {
     loading.value = false
   }
-}
-
-function onBrandUpdated(updated: Brand): void {
-  brand.value = { ...brand.value, ...updated }
 }
 
 watch(brand, (b) => {
@@ -65,14 +60,9 @@ watch(brand, (b) => {
     <TabBar v-model="activeTab" :tabs="tabs" />
 
     <div class="tab-content">
-      <BrandInfoTab v-if="activeTab === 'info'" :brand="brand" @updated="onBrandUpdated" />
-      <VenuesTab v-else-if="activeTab === 'venues'" :brand-id="brand.id" />
+      <VenuesTab v-if="activeTab === 'venues'" :brand-id="brand.id" :brand-name="brand.name" />
       <MenusTab v-else-if="activeTab === 'menus'" :brand-id="brand.id" />
-      <ServingTimesPanel
-        v-else-if="activeTab === 'serving-times'"
-        parent-type="brand"
-        :parent-id="brand.id"
-      />
+      <OrderTypesTab v-else-if="activeTab === 'order-types'" :brand-id="brand.id" />
     </div>
   </template>
 </template>

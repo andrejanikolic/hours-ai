@@ -31,23 +31,26 @@ export function useServingTimes() {
     remove: (servingTimeId: number) => api.del(`/serving-times/${servingTimeId}`),
 
     /**
-     * Returns the flat parse result. The backend wraps under `preview` — we
-     * unwrap here so components don't have to know about the envelope.
+     * Returns the flat parse result. Backend response shape:
+     * `{ preview: ServingTimeInput[], clarification_needed, clarification_message }`.
+     * `entityName` is optional context fed into the DeepSeek system prompt.
      */
     parse: async (
       parentType: ParentType,
       parentId: number,
       prompt: string,
+      entityName?: string,
     ): Promise<ParseResult> => {
       const body = await api.post<ParseResponseBody>('/serving-times/parse', {
         parent_type: parentType,
         parent_id: parentId,
         prompt,
+        ...(entityName ? { entity_name: entityName } : {}),
       })
       return {
-        serving_times: body.preview?.serving_times ?? [],
-        clarification_needed:
-          body.clarification_needed ?? body.preview?.clarification_needed ?? false,
+        serving_times: Array.isArray(body.preview) ? body.preview : [],
+        clarification_needed: body.clarification_needed ?? false,
+        clarification_message: body.clarification_message ?? null,
       }
     },
 

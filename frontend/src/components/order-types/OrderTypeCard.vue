@@ -110,6 +110,7 @@ async function onConfirmDetach(): Promise<void> {
       <ServingTimesPanel
         parent-type="order_type"
         :parent-id="attached.venue_order_type_id"
+        :entity-name="orderType.name"
       />
     </div>
   </article>

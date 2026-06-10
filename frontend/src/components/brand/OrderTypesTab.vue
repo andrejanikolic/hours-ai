@@ -1,80 +1,89 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useVenues } from '../../composables/useVenues'
+import { useVenueOrderTypes } from '../../composables/useVenueOrderTypes'
 import { useServingTimes } from '../../composables/useServingTimes'
 import { useToast } from '../../composables/useToast'
 import { ApiError } from '../../composables/useApi'
-import type { ParseResult, ServingTime, Venue } from '../../types'
+import type { ParseResult, ServingTime } from '../../types'
 
 import AppButton from '../shared/AppButton.vue'
 import AppTextarea from '../shared/AppTextarea.vue'
 import ListSkeleton from '../shared/ListSkeleton.vue'
-import StatusDot from '../shared/StatusDot.vue'
 import DayChips from '../serving-times/DayChips.vue'
 import ServingTimesDiff from '../serving-times/ServingTimesDiff.vue'
 
-const props = defineProps<{ brandId: number; brandName: string }>()
+const props = defineProps<{ brandId: number }>()
 
-interface VenuePreview {
+/** Slugs we surface on this tab. */
+const DELIVERY_SLUGS = ['delivery', 'catering-delivery']
+
+interface Row {
+  rowKey: string
   venueId: number
   venueName: string
+  orderTypeId: number
+  orderTypeName: string
+  orderTypeSlug: string
+  venueOrderTypeId: number
   current: ServingTime[]
+}
+
+interface RowPreview {
+  rowKey: string
+  row: Row
   proposed: ParseResult
   error?: string
   skipped: boolean
 }
 
-const venues = ref<Venue[]>([])
+const rows = ref<Row[]>([])
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
-const selectedIds = ref<Set<number>>(new Set())
+const selectedKeys = ref<Set<string>>(new Set())
 const prompt = ref('')
 
 const parsing = ref(false)
 const parseProgress = ref<{ done: number; total: number } | null>(null)
-const previews = ref<VenuePreview[]>([])
-
+const previews = ref<RowPreview[]>([])
 const applying = ref(false)
 
 const { list: listVenues } = useVenues()
-const { parse: parseHours, replace: replaceHours, list: listServingTimes } =
-  useServingTimes()
+const { list: listVenueOrderTypes } = useVenueOrderTypes()
+const {
+  parse: parseHours,
+  replace: replaceHours,
+  list: listServingTimes,
+} = useServingTimes()
 const toast = useToast()
 
 const PROMPT_EXAMPLES = [
-  'Open Monday to Friday 9am to 10pm, Saturday 10am to 11pm, closed Sundays',
-  'Open every day from 10am to 10pm',
+  'Delivery available Monday to Friday 10am to 10pm, weekends 11am to 9pm',
+  'Available every day 9am to 11pm',
+  'Monday to Friday 11am to 9pm, closed weekends',
   'Closed December 25 and January 1',
-  'Open weekdays 8am-10pm, weekends 9am-11pm',
 ]
 
 const PROMPT_TEMPLATES: { label: string; text: string }[] = [
   {
-    label: 'Standard week',
-    text: 'Open Monday to Friday 9am to 10pm, Saturday 10am to 11pm, closed Sundays',
+    label: 'Delivery hours',
+    text: 'Delivery available Monday to Friday 10am to 10pm, Saturday and Sunday 11am to 9pm',
   },
+  { label: 'Extended', text: 'Available every day 9am to 11pm' },
   {
-    label: 'Every day',
-    text: 'Open every day 10am to 11pm',
+    label: 'Weekdays only',
+    text: 'Available Monday to Friday 11am to 9pm, closed weekends',
   },
-  {
-    label: 'Late night Fri–Sat',
-    text: 'Open Monday to Thursday 11am to 10pm, Friday and Saturday 11am to midnight, closed Sundays',
-  },
-  {
-    label: 'Holiday closure',
-    text: "Closed Christmas Day December 25 and New Year's Day January 1",
-  },
+  { label: 'Holiday cutoff', text: 'Closed December 25 and January 1' },
 ]
 
 function applyTemplate(text: string): void {
   prompt.value = text
 }
+
 const placeholderIdx = ref(0)
 let placeholderTimer: number | null = null
-
 const placeholder = computed(() => `e.g. ${PROMPT_EXAMPLES[placeholderIdx.value]}`)
 
 onMounted(() => {
@@ -86,23 +95,44 @@ onMounted(() => {
   }, 4000)
 })
 
-function dispose(): void {
+onBeforeUnmount(() => {
   if (placeholderTimer !== null) {
     window.clearInterval(placeholderTimer)
     placeholderTimer = null
   }
-}
-
-import { onBeforeUnmount } from 'vue'
-onBeforeUnmount(dispose)
+})
 
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = null
   try {
-    venues.value = await listVenues(props.brandId)
-    // Preselect every venue — operator's natural intent on this tab is "configure all of them".
-    selectedIds.value = new Set(venues.value.map((v) => v.id))
+    const venues = await listVenues(props.brandId)
+    const perVenue = await Promise.all(
+      venues.map((v) =>
+        listVenueOrderTypes(props.brandId, v.id).then((ots) => ({
+          venue: v,
+          ots,
+        })),
+      ),
+    )
+    const result: Row[] = []
+    for (const { venue, ots } of perVenue) {
+      for (const ot of ots) {
+        if (!DELIVERY_SLUGS.includes(ot.slug)) continue
+        result.push({
+          rowKey: `${venue.id}-${ot.id}`,
+          venueId: venue.id,
+          venueName: venue.name,
+          orderTypeId: ot.id,
+          orderTypeName: ot.name,
+          orderTypeSlug: ot.slug,
+          venueOrderTypeId: ot.venue_order_type_id,
+          current: ot.serving_times,
+        })
+      }
+    }
+    rows.value = result
+    selectedKeys.value = new Set(result.map((r) => r.rowKey))
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : 'Network error'
   } finally {
@@ -112,32 +142,34 @@ async function load(): Promise<void> {
 
 const allChecked = computed(
   () =>
-    venues.value.length > 0 &&
-    venues.value.every((v) => selectedIds.value.has(v.id)),
+    rows.value.length > 0 &&
+    rows.value.every((r) => selectedKeys.value.has(r.rowKey)),
 )
-const someChecked = computed(() => selectedIds.value.size > 0 && !allChecked.value)
+const someChecked = computed(
+  () => selectedKeys.value.size > 0 && !allChecked.value,
+)
 
 function toggleAll(): void {
-  if (allChecked.value) {
-    selectedIds.value = new Set()
-  } else {
-    selectedIds.value = new Set(venues.value.map((v) => v.id))
-  }
+  selectedKeys.value = allChecked.value
+    ? new Set()
+    : new Set(rows.value.map((r) => r.rowKey))
 }
 
-function toggle(id: number): void {
-  const next = new Set(selectedIds.value)
-  next.has(id) ? next.delete(id) : next.add(id)
-  selectedIds.value = next
+function toggle(key: string): void {
+  const next = new Set(selectedKeys.value)
+  next.has(key) ? next.delete(key) : next.add(key)
+  selectedKeys.value = next
 }
 
-const targets = computed(() => venues.value.filter((v) => selectedIds.value.has(v.id)))
+const targets = computed(() =>
+  rows.value.filter((r) => selectedKeys.value.has(r.rowKey)),
+)
 const canParse = computed(
   () => prompt.value.trim().length > 0 && !parsing.value && targets.value.length > 0,
 )
 const parseBlockedReason = computed(() => {
   if (!prompt.value.trim()) return 'Type a prompt above'
-  if (!targets.value.length) return 'Select at least one venue'
+  if (!targets.value.length) return 'Select at least one channel'
   return null
 })
 
@@ -148,33 +180,39 @@ async function onParse(): Promise<void> {
   parseProgress.value = { done: 0, total: targets.value.length }
 
   const text = prompt.value.trim()
-  const targetList = targets.value
-  const results: VenuePreview[] = []
+  const list = targets.value
+  const results: RowPreview[] = []
 
-  // Parse in small batches to avoid hammering the DeepSeek endpoint.
   const BATCH = 3
-  for (let i = 0; i < targetList.length; i += BATCH) {
-    const batch = targetList.slice(i, i + BATCH)
+  for (let i = 0; i < list.length; i += BATCH) {
+    const batch = list.slice(i, i + BATCH)
     const batchResults = await Promise.all(
-      batch.map(async (venue): Promise<VenuePreview> => {
+      batch.map(async (row): Promise<RowPreview> => {
         try {
           const [current, proposed] = await Promise.all([
-            listServingTimes('venue', venue.id),
-            parseHours('venue', venue.id, text, venue.name),
+            listServingTimes('order_type', row.venueOrderTypeId),
+            parseHours(
+              'order_type',
+              row.venueOrderTypeId,
+              text,
+              `${row.venueName} · ${row.orderTypeName}`,
+            ),
           ])
           return {
-            venueId: venue.id,
-            venueName: venue.name,
-            current,
+            rowKey: row.rowKey,
+            row: { ...row, current },
             proposed,
             skipped: false,
           }
         } catch (e) {
           return {
-            venueId: venue.id,
-            venueName: venue.name,
-            current: venue.serving_times ?? [],
-            proposed: { serving_times: [], clarification_needed: false, clarification_message: null },
+            rowKey: row.rowKey,
+            row,
+            proposed: {
+              serving_times: [],
+              clarification_needed: false,
+              clarification_message: null,
+            },
             error: e instanceof ApiError ? e.message : 'Network error',
             skipped: true,
           }
@@ -182,8 +220,8 @@ async function onParse(): Promise<void> {
       }),
     )
     results.push(...batchResults)
-    parseProgress.value = { done: results.length, total: targetList.length }
-    if (i + BATCH < targetList.length) await new Promise((r) => setTimeout(r, 400))
+    parseProgress.value = { done: results.length, total: list.length }
+    if (i + BATCH < list.length) await new Promise((r) => setTimeout(r, 400))
   }
 
   previews.value = results
@@ -191,7 +229,7 @@ async function onParse(): Promise<void> {
   parseProgress.value = null
 }
 
-function toggleSkip(p: VenuePreview): void {
+function toggleSkip(p: RowPreview): void {
   p.skipped = !p.skipped
 }
 
@@ -232,14 +270,18 @@ async function onApply(): Promise<void> {
     for (let i = 0; i < toApply.length; i += BATCH) {
       const batch = toApply.slice(i, i + BATCH)
       const results = await Promise.allSettled(
-        batch.map((p) => replaceHours('venue', p.venueId, p.proposed.serving_times)),
+        batch.map((p) =>
+          replaceHours('order_type', p.row.venueOrderTypeId, p.proposed.serving_times),
+        ),
       )
       failed += results.filter((r) => r.status === 'rejected').length
       if (i + BATCH < toApply.length) await new Promise((r) => setTimeout(r, 200))
     }
     const ok = toApply.length - failed
-    if (ok > 0) toast.success(`Applied to ${ok} ${ok === 1 ? 'venue' : 'venues'}`)
-    if (failed > 0) toast.error(`${failed} venue${failed === 1 ? '' : 's'} failed to update`)
+    if (ok > 0)
+      toast.success(`Applied to ${ok} ${ok === 1 ? 'channel' : 'channels'}`)
+    if (failed > 0)
+      toast.error(`${failed} channel${failed === 1 ? '' : 's'} failed to update`)
     previews.value = []
     prompt.value = ''
     await load()
@@ -248,54 +290,55 @@ async function onApply(): Promise<void> {
   }
 }
 
-/* ---- compact display helpers for the "current hours" cell ---- */
+/* ---- display helpers ---- */
 
 function weekdaySlots(times: ServingTime[]) {
   return times.filter((t) => t.type === 'weekday')
 }
-
 function specialSlots(times: ServingTime[]) {
   return times.filter((t) => t.type === 'special')
 }
-
 function timeRange(s: ServingTime): string {
   if (!s.working) return 'Closed'
   if (!s.time_from || !s.time_to) return '—'
   return `${s.time_from}–${s.time_to}`
 }
+function rowLabel(p: RowPreview): string {
+  return `${p.row.venueName} · ${p.row.orderTypeName}`
+}
 </script>
 
 <template>
-  <div class="venues">
-    <header class="venues__intro">
-      <h3 class="venues__title">
+  <div class="ot">
+    <header class="ot__intro">
+      <h3 class="ot__title">
         <span aria-hidden="true">✦</span>
-        Configure opening hours
+        Configure delivery hours
       </h3>
-      <p class="venues__subtitle">
-        Select venues, describe the schedule in plain English, then review &amp; apply.
+      <p class="ot__subtitle">
+        Set delivery times per venue for the <strong>Delivery</strong> and
+        <strong>Catering Delivery</strong> channels.
       </p>
     </header>
 
-    <!-- Loading / error / empty -->
-    <ListSkeleton v-if="loading" :rows="3" />
+    <ListSkeleton v-if="loading" :rows="4" />
 
     <div v-else-if="loadError" class="state state--error">
-      <strong>Couldn't load venues.</strong>
+      <strong>Couldn't load delivery channels.</strong>
       <span>{{ loadError }}</span>
       <AppButton variant="secondary" size="sm" @click="load">Try again</AppButton>
     </div>
 
-    <div v-else-if="!venues.length" class="state">
-      <h3>No venues yet</h3>
+    <div v-else-if="!rows.length" class="state">
+      <h3>No delivery channels attached</h3>
       <p>
-        This brand has no venues. Add one from
-        <RouterLink :to="`/brands/${brandId}`">the Brand page</RouterLink> first.
+        None of this brand's venues have Delivery or Catering Delivery attached yet.
+        Attach them from each venue's Order Types tab first.
       </p>
     </div>
 
     <template v-else>
-      <!-- Venues table -->
+      <!-- Channels table -->
       <section class="card">
         <header class="card__head">
           <label class="check">
@@ -309,10 +352,10 @@ function timeRange(s: ServingTime): string {
             <span class="check__label">
               {{
                 allChecked
-                  ? `All ${venues.length} selected`
-                  : selectedIds.size > 0
-                  ? `${selectedIds.size} of ${venues.length} selected`
-                  : `Select venues to configure`
+                  ? `All ${rows.length} selected`
+                  : selectedKeys.size > 0
+                  ? `${selectedKeys.size} of ${rows.length} selected`
+                  : `Select delivery channels to configure`
               }}
             </span>
           </label>
@@ -320,37 +363,36 @@ function timeRange(s: ServingTime): string {
 
         <ul class="rows">
           <li
-            v-for="v in venues"
-            :key="v.id"
+            v-for="r in rows"
+            :key="r.rowKey"
             class="row"
-            :class="{ 'row--selected': selectedIds.has(v.id) }"
-            @click="toggle(v.id)"
+            :class="{ 'row--selected': selectedKeys.has(r.rowKey) }"
+            @click="toggle(r.rowKey)"
           >
             <label class="check check--row" @click.stop>
               <input
                 type="checkbox"
-                :checked="selectedIds.has(v.id)"
-                @change="toggle(v.id)"
+                :checked="selectedKeys.has(r.rowKey)"
+                @change="toggle(r.rowKey)"
               />
               <span class="check__box"></span>
             </label>
             <div class="row__main">
-              <RouterLink
-                :to="`/brands/${brandId}/venues/${v.id}`"
-                class="row__name"
-                @click.stop
+              <span class="row__venue">{{ r.venueName }}</span>
+              <span
+                class="row__ot"
+                :class="`row__ot--${r.orderTypeSlug}`"
               >
-                {{ v.name }}
-              </RouterLink>
-              <span v-if="v.address" class="row__sub">{{ v.address }}</span>
+                {{ r.orderTypeName }}
+              </span>
             </div>
             <div class="row__hours">
-              <template v-if="(v.serving_times?.length ?? 0) === 0">
+              <template v-if="r.current.length === 0">
                 <span class="row__hours-empty">No hours set</span>
               </template>
               <template v-else>
                 <span
-                  v-for="(s, i) in weekdaySlots(v.serving_times ?? [])"
+                  v-for="(s, i) in weekdaySlots(r.current)"
                   :key="`w-${s.id ?? i}`"
                   class="row__hours-slot"
                 >
@@ -358,7 +400,7 @@ function timeRange(s: ServingTime): string {
                   <span class="row__hours-time">{{ timeRange(s) }}</span>
                 </span>
                 <span
-                  v-for="s in specialSlots(v.serving_times ?? [])"
+                  v-for="s in specialSlots(r.current)"
                   :key="`s-${s.id}`"
                   class="row__hours-special"
                   :class="s.working ? 'row__hours-special--open' : 'row__hours-special--closed'"
@@ -372,15 +414,15 @@ function timeRange(s: ServingTime): string {
         </ul>
       </section>
 
-      <!-- Prompt card (hidden once previews are showing) -->
+      <!-- Prompt card -->
       <section v-if="!previews.length" class="card prompt-card">
         <header class="prompt-card__head">
           <h3 class="prompt-card__title">
             <span class="prompt-card__sparkle" aria-hidden="true">✦</span>
-            Describe the new opening hours
+            Describe when delivery is available
           </h3>
           <p class="prompt-card__hint">
-            HoursAI will parse your sentence and apply it to the venues you selected.
+            HoursAI will parse your sentence and apply it to the channels you selected.
           </p>
         </header>
 
@@ -423,7 +465,7 @@ function timeRange(s: ServingTime): string {
             <template v-else-if="parsing">Asking HoursAI…</template>
             <template v-else>
               Preview with HoursAI · {{ targets.length }}
-              {{ targets.length === 1 ? 'venue' : 'venues' }}
+              {{ targets.length === 1 ? 'channel' : 'channels' }}
             </template>
           </AppButton>
         </div>
@@ -435,7 +477,7 @@ function timeRange(s: ServingTime): string {
           <div>
             <h3 class="previews__title">Preview ✦</h3>
             <p class="previews__sub">
-              Review each venue before applying. Uncheck any you want to skip.
+              Review each delivery channel before applying. Uncheck any you want to skip.
             </p>
           </div>
           <div class="previews__actions">
@@ -451,14 +493,15 @@ function timeRange(s: ServingTime): string {
               :disabled="!applyableCount || applying"
               @click="onApply"
             >
-              Apply to {{ applyableCount }} {{ applyableCount === 1 ? 'venue' : 'venues' }}
+              Apply to {{ applyableCount }}
+              {{ applyableCount === 1 ? 'channel' : 'channels' }}
             </AppButton>
           </div>
         </header>
 
         <article
           v-for="p in previews"
-          :key="p.venueId"
+          :key="p.rowKey"
           class="card preview-card"
           :class="{ 'preview-card--skipped': p.skipped }"
         >
@@ -477,7 +520,7 @@ function timeRange(s: ServingTime): string {
             </label>
             <span v-else class="preview-card__check-spacer"></span>
 
-            <h4 class="preview-card__name">{{ p.venueName }}</h4>
+            <h4 class="preview-card__name">{{ rowLabel(p) }}</h4>
 
             <span v-if="p.error" class="preview-card__status preview-card__status--error">
               Error
@@ -513,7 +556,7 @@ function timeRange(s: ServingTime): string {
           </div>
           <ServingTimesDiff
             v-else
-            :current="p.current"
+            :current="p.row.current"
             :proposed="p.proposed.serving_times"
           />
         </article>
@@ -523,24 +566,20 @@ function timeRange(s: ServingTime): string {
 </template>
 
 <style scoped>
-.venues {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
+.ot { display: flex; flex-direction: column; gap: 20px; }
 
-.venues__intro { display: flex; flex-direction: column; gap: 4px; }
-.venues__title {
+.ot__intro { display: flex; flex-direction: column; gap: 4px; }
+.ot__title {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 16px;
   color: var(--grayscale-100);
 }
-.venues__title span:first-child { color: var(--primary-accent-100); font-size: 18px; }
-.venues__subtitle { color: var(--grayscale-60); font-size: 13px; }
+.ot__title span:first-child { color: var(--primary-accent-100); font-size: 18px; }
+.ot__subtitle { color: var(--grayscale-60); font-size: 13px; }
+.ot__subtitle strong { color: var(--grayscale-100); font-weight: var(--font-weight-semibold); }
 
-/* Card shared shell */
 .card {
   background: var(--white);
   border: 1px solid var(--transparent-05);
@@ -548,14 +587,12 @@ function timeRange(s: ServingTime): string {
   box-shadow: var(--shadow-card);
   overflow: hidden;
 }
-
 .card__head {
   padding: 12px 16px;
   background: var(--grayscale-05);
   border-bottom: 1px solid var(--transparent-05);
 }
 
-/* Custom checkbox (no native styling) */
 .check {
   display: inline-flex;
   align-items: center;
@@ -584,8 +621,7 @@ function timeRange(s: ServingTime): string {
 }
 .check input:checked + .check__box::after {
   content: '';
-  width: 10px;
-  height: 5px;
+  width: 10px; height: 5px;
   border-left: 2px solid var(--white);
   border-bottom: 2px solid var(--white);
   transform: rotate(-45deg) translate(1px, -1px);
@@ -596,14 +632,12 @@ function timeRange(s: ServingTime): string {
 }
 .check input:indeterminate + .check__box::after {
   content: '';
-  width: 10px;
-  height: 2px;
+  width: 10px; height: 2px;
   background: var(--white);
 }
 .check__label { font-weight: var(--font-weight-semibold); color: var(--grayscale-100); }
 .check--row { padding: 4px; }
 
-/* Venue rows */
 .rows {
   list-style: none;
   margin: 0;
@@ -625,14 +659,36 @@ function timeRange(s: ServingTime): string {
 .row--selected { background: var(--primary-accent-04-transparent); }
 .row--selected:hover { background: var(--primary-accent-07-transparent); }
 
-.row__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.row__name {
+.row__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.row__venue {
   font-weight: var(--font-weight-semibold);
   color: var(--grayscale-100);
   font-size: 14px;
 }
-.row__name:hover { color: var(--primary-accent-100); text-decoration: underline; }
-.row__sub { font-size: 12px; color: var(--grayscale-50); }
+.row__ot {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-radius: var(--radius-sm);
+}
+.row__ot--delivery {
+  background: var(--primary-accent-15);
+  color: var(--primary-accent-100);
+}
+.row__ot--catering-delivery {
+  background: var(--status-warning-15);
+  color: var(--status-activating);
+}
 
 .row__hours {
   display: flex;
@@ -730,7 +786,6 @@ function timeRange(s: ServingTime): string {
 }
 .templates__item:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Previews */
 .previews { display: flex; flex-direction: column; gap: 16px; }
 .previews__head {
   display: flex;
@@ -780,7 +835,6 @@ function timeRange(s: ServingTime): string {
 .preview-card__status--error   { background: rgba(255, 59, 48, 0.12); color: var(--status-error); }
 .preview-card__status--neutral { background: var(--grayscale-05); color: var(--grayscale-60); }
 
-/* Banners */
 .banner {
   display: flex;
   flex-direction: column;
@@ -802,7 +856,6 @@ function timeRange(s: ServingTime): string {
 .banner--warning strong { color: var(--status-activating); }
 .banner span { color: var(--grayscale-80); font-size: 13px; }
 
-/* State boxes */
 .state {
   display: flex;
   flex-direction: column;

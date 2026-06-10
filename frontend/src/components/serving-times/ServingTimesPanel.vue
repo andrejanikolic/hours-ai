@@ -8,14 +8,15 @@ import HoursAIPrompt from './HoursAIPrompt.vue'
 defineProps<{
   parentType: ParentType
   parentId: number
+  entityName?: string
 }>()
 
 const subTabs: Tab[] = [
-  { id: 'manual', label: 'Manual' },
   { id: 'hoursai', label: 'HoursAI ✦' },
+  { id: 'manual', label: 'Manual' },
 ]
 
-const activeSubTab = ref('manual')
+const activeSubTab = ref('hoursai')
 
 function onApplied(): void {
   activeSubTab.value = 'manual'
@@ -35,6 +36,7 @@ function onApplied(): void {
         v-else
         :parent-type="parentType"
         :parent-id="parentId"
+        :entity-name="entityName"
         @applied="onApplied"
       />
     </div>

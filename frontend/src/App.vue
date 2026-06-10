@@ -32,13 +32,14 @@ const crumbs = computed<Crumb[]>(() => {
 
 const brandsActive = computed(() => route.path.startsWith('/brands'))
 const testActive = computed(() => route.path.startsWith('/test'))
+const hoursaiActive = computed(() => route.path.startsWith('/hoursai'))
 </script>
 
 <template>
   <div class="app">
     <header class="topbar">
       <div class="topbar__left">
-        <RouterLink to="/brands" class="logo" aria-label="HoursAI home">
+        <RouterLink to="/hoursai" class="logo" aria-label="HoursAI home">
           <img :src="parLogo" alt="PAR" class="logo__mark" />
           <span class="logo__divider" aria-hidden="true"></span>
           <span class="logo__product">HoursAI</span>
@@ -59,6 +60,14 @@ const testActive = computed(() => route.path.startsWith('/test'))
     <aside class="sidebar" aria-label="Primary">
       <div class="sidebar__section-label">Hours AI</div>
       <nav class="sidebar__nav">
+        <RouterLink
+          to="/hoursai"
+          class="sidebar__item sidebar__item--featured"
+          :class="{ 'sidebar__item--active': hoursaiActive }"
+        >
+          <span class="sidebar__icon" aria-hidden="true">✦</span>
+          <span class="sidebar__label">HoursAI</span>
+        </RouterLink>
         <RouterLink
           to="/test"
           class="sidebar__item"
@@ -233,6 +242,21 @@ const testActive = computed(() => route.path.startsWith('/test'))
   background: var(--primary-accent-07-transparent);
   color: var(--primary-accent-100);
   font-weight: var(--font-weight-semibold);
+}
+
+.sidebar__item--featured {
+  font-weight: var(--font-weight-semibold);
+}
+.sidebar__item--featured .sidebar__icon {
+  color: var(--primary-accent-100);
+  font-size: 18px;
+}
+.sidebar__item--featured.sidebar__item--active {
+  background: var(--primary-accent-100);
+  color: var(--white);
+}
+.sidebar__item--featured.sidebar__item--active .sidebar__icon {
+  color: var(--white);
 }
 
 .sidebar__icon {

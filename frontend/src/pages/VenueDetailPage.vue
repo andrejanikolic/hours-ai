@@ -84,6 +84,7 @@ watch(venue, (v) => {
         v-else-if="activeTab === 'serving-times'"
         parent-type="venue"
         :parent-id="venue.id"
+        :entity-name="venue.name"
       />
     </div>
   </template>

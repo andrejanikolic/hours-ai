@@ -3,13 +3,17 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useServingTimes } from '../../composables/useServingTimes'
 import { useToast } from '../../composables/useToast'
 import { ApiError } from '../../composables/useApi'
-import type { ParentType, ParseResult } from '../../types'
+import type { ParentType, ParseResult, ServingTime } from '../../types'
 import AppButton from '../shared/AppButton.vue'
 import AppTextarea from '../shared/AppTextarea.vue'
 import ConfirmDelete from '../shared/ConfirmDelete.vue'
-import ServingTimesPreview from './ServingTimesPreview.vue'
+import ServingTimesDiff from './ServingTimesDiff.vue'
 
-const props = defineProps<{ parentType: ParentType; parentId: number }>()
+const props = defineProps<{
+  parentType: ParentType
+  parentId: number
+  entityName?: string
+}>()
 const emit = defineEmits<{ (e: 'applied'): void }>()
 
 const PROMPT_EXAMPLES = [
@@ -23,6 +27,9 @@ const promptText = ref('')
 const placeholderIdx = ref(0)
 let placeholderTimer: number | null = null
 
+const currentItems = ref<ServingTime[]>([])
+const currentLoaded = ref(false)
+
 const parsing = ref(false)
 const parseError = ref('')
 const result = ref<ParseResult | null>(null)
@@ -31,19 +38,27 @@ const applying = ref(false)
 const applyError = ref('')
 const confirmingApply = ref(false)
 
-const { parse, replace } = useServingTimes()
+const { list, parse, replace } = useServingTimes()
 const toast = useToast()
 
 const canParse = computed(() => promptText.value.trim().length > 0 && !parsing.value)
 const canApply = computed(() => !!result.value && result.value.serving_times.length > 0)
 const placeholder = computed(() => `e.g. "${PROMPT_EXAMPLES[placeholderIdx.value]}"`)
 
-onMounted(() => {
+onMounted(async () => {
   placeholderTimer = window.setInterval(() => {
     if (!promptText.value) {
       placeholderIdx.value = (placeholderIdx.value + 1) % PROMPT_EXAMPLES.length
     }
   }, 4000)
+
+  try {
+    currentItems.value = await list(props.parentType, props.parentId)
+  } catch {
+    /* Diff still works with empty 'current' — every proposed slot shows as 'added'. */
+  } finally {
+    currentLoaded.value = true
+  }
 })
 
 onBeforeUnmount(() => {
@@ -60,6 +75,7 @@ async function onParse(): Promise<void> {
       props.parentType,
       props.parentId,
       promptText.value.trim(),
+      props.entityName,
     )
   } catch (e) {
     parseError.value =
@@ -134,10 +150,10 @@ async function onApplyConfirm(): Promise<void> {
       <p v-if="parseError" class="banner banner--error">{{ parseError }}</p>
     </section>
 
-    <!-- Clarification needed (defensive — backend doesn't currently emit this) -->
+    <!-- Clarification needed -->
     <section v-else-if="result.clarification_needed" class="banner banner--warning">
       <strong>Need a bit more detail.</strong>
-      <p>Try rephrasing the prompt with specific days or times.</p>
+      <p>{{ result.clarification_message ?? 'Try rephrasing with specific days or times.' }}</p>
       <AppButton variant="secondary" size="sm" @click="onEdit">Edit prompt</AppButton>
     </section>
 
@@ -147,14 +163,13 @@ async function onApplyConfirm(): Promise<void> {
         <header class="card__head">
           <h3 class="card__title">
             <span class="card__sparkle" aria-hidden="true">✦</span>
-            Preview — what we understood
+            Preview — what will change
           </h3>
           <p class="card__hint">
-            {{ result.serving_times.length }} slot{{ result.serving_times.length === 1 ? '' : 's' }}
-            · Nothing has been saved yet.
+            Nothing has been saved yet. Review the diff below before applying.
           </p>
         </header>
-        <ServingTimesPreview :items="result.serving_times" />
+        <ServingTimesDiff :current="currentItems" :proposed="result.serving_times" />
       </section>
 
       <p v-if="applyError" class="banner banner--error">{{ applyError }}</p>
