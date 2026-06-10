@@ -1,0 +1,58 @@
+services:
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hoursai_app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./backend:/var/www
+    networks:
+      - hoursai
+
+  nginx:
+    image: nginx:alpine
+    container_name: hoursai_nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./backend:/var/www
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - hoursai
+
+  mysql:
+    image: mysql:8.0
+    container_name: hoursai_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: hoursai
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: hoursai
+      MYSQL_PASSWORD: secret
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - hoursai
+
+  redis:
+    image: redis:alpine
+    container_name: hoursai_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - hoursai
+
+networks:
+  hoursai:
+    driver: bridge
+
+volumes:
+  mysql_data:
