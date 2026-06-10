@@ -1,120 +1,176 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useBrands } from '../composables/useBrands'
+import { useToast } from '../composables/useToast'
 import { ApiError } from '../composables/useApi'
 import type { Brand } from '../types'
+import PageHeader from '../components/shared/PageHeader.vue'
+import AppButton from '../components/shared/AppButton.vue'
+import AppInput from '../components/shared/AppInput.vue'
+import InlineCreateForm from '../components/shared/InlineCreateForm.vue'
+import BrandCard from '../components/brand/BrandCard.vue'
+import ListSkeleton from '../components/shared/ListSkeleton.vue'
 
 const brands = ref<Brand[]>([])
 const loading = ref(true)
-const error = ref<string | null>(null)
+const loadError = ref<string | null>(null)
 
-const { list } = useBrands()
+const showCreate = ref(false)
+const newName = ref('')
+const newError = ref('')
+const saving = ref(false)
 
-onMounted(async () => {
+const deletingId = ref<number | null>(null)
+
+const { list, create, remove } = useBrands()
+const toast = useToast()
+
+onMounted(loadBrands)
+
+async function loadBrands(): Promise<void> {
+  loading.value = true
+  loadError.value = null
   try {
     brands.value = await list()
   } catch (e) {
-    error.value = e instanceof ApiError ? `${e.status} · ${e.message}` : String(e)
+    loadError.value = e instanceof ApiError ? e.message : 'Network error'
   } finally {
     loading.value = false
   }
-})
+}
+
+function openCreate(): void {
+  showCreate.value = true
+  newName.value = ''
+  newError.value = ''
+}
+
+function cancelCreate(): void {
+  showCreate.value = false
+  newName.value = ''
+  newError.value = ''
+}
+
+async function saveCreate(): Promise<void> {
+  newError.value = ''
+  saving.value = true
+  try {
+    const created = await create({ name: newName.value.trim() })
+    brands.value = [created, ...brands.value]
+    cancelCreate()
+    toast.success(`Created '${created.name}'`)
+  } catch (e) {
+    if (e instanceof ApiError) {
+      newError.value = e.firstFieldError('name') ?? e.message
+    } else {
+      newError.value = 'Network error'
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onDelete(id: number): Promise<void> {
+  deletingId.value = id
+  try {
+    await remove(id)
+    brands.value = brands.value.filter((b) => b.id !== id)
+    toast.success('Brand deleted')
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : 'Network error')
+  } finally {
+    deletingId.value = null
+  }
+}
 </script>
 
 <template>
-  <section class="page">
-    <header class="page__head">
-      <h1>Brands</h1>
-      <p class="page__subtitle">Phase 1 smoke test — full list page lands in Phase 3.</p>
-    </header>
+  <PageHeader title="Brands" subtitle="Manage your brands, their venues, menus, and serving times.">
+    <template #actions>
+      <AppButton v-if="!showCreate" @click="openCreate">+ Add brand</AppButton>
+    </template>
+  </PageHeader>
 
-    <div v-if="loading" class="state">Loading brands…</div>
+  <div v-if="showCreate" class="brands__create">
+    <InlineCreateForm
+      :saving="saving"
+      :can-save="!!newName.trim()"
+      save-label="Add brand"
+      @save="saveCreate"
+      @cancel="cancelCreate"
+    >
+      <AppInput
+        v-model="newName"
+        label="Brand name"
+        placeholder="e.g. Demo Burger"
+        :error="newError"
+        required
+      />
+    </InlineCreateForm>
+  </div>
 
-    <div v-else-if="error" class="state state--error">
-      <strong>Couldn't load brands.</strong>
-      <code>{{ error }}</code>
+  <div v-if="loading" class="brands__grid brands__grid--loading">
+    <div v-for="i in 4" :key="i" class="brands__skel">
+      <ListSkeleton :rows="1" row-height="134px" />
     </div>
+  </div>
 
-    <div v-else class="state state--ok">
-      Loaded <strong>{{ brands.length }}</strong> brand{{ brands.length === 1 ? '' : 's' }}.
-      <ul v-if="brands.length" class="brand-list">
-        <li v-for="b in brands" :key="b.id" class="brand-list__item">
-          <span class="brand-list__id">#{{ b.id }}</span>
-          <span class="brand-list__name">{{ b.name }}</span>
-          <span class="brand-list__slug">{{ b.slug }}</span>
-        </li>
-      </ul>
-    </div>
-  </section>
+  <div v-else-if="loadError" class="state state--error">
+    <strong>Couldn't load brands.</strong>
+    <span>{{ loadError }}</span>
+    <AppButton variant="secondary" size="sm" @click="loadBrands">Try again</AppButton>
+  </div>
+
+  <div v-else-if="brands.length === 0" class="state">
+    <h3>No brands yet</h3>
+    <p>Add your first brand to start configuring serving times.</p>
+    <AppButton v-if="!showCreate" @click="openCreate">+ Add brand</AppButton>
+  </div>
+
+  <div v-else class="brands__grid">
+    <BrandCard
+      v-for="b in brands"
+      :key="b.id"
+      :brand="b"
+      :deleting="deletingId === b.id"
+      @delete="onDelete"
+    />
+  </div>
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+.brands__create {
+  margin-bottom: 24px;
 }
 
-.page__subtitle {
-  margin-top: 4px;
-  color: var(--grayscale-60);
-  font-size: 13px;
+.brands__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
+
+.brands__grid--loading { pointer-events: none; }
+.brands__skel { display: contents; }
 
 .state {
-  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 32px;
   background: var(--white);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   color: var(--grayscale-80);
 }
+.state h3 { font-size: 16px; }
+.state p { color: var(--grayscale-60); font-size: 13px; }
 
 .state--error {
   color: var(--status-error);
+  background: rgba(255, 59, 48, 0.04);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  box-shadow: none;
 }
-
-.state--error code {
-  display: block;
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--grayscale-60);
-}
-
-.brand-list {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.brand-list__item {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--transparent-05);
-  font-size: 14px;
-}
-
-.brand-list__item:last-child {
-  border-bottom: none;
-}
-
-.brand-list__id {
-  color: var(--grayscale-50);
-  font-variant-numeric: tabular-nums;
-  min-width: 32px;
-}
-
-.brand-list__name {
-  font-weight: var(--font-weight-semibold);
-  color: var(--grayscale-100);
-}
-
-.brand-list__slug {
-  color: var(--grayscale-50);
-  font-size: 12px;
-}
+.state--error span { color: var(--grayscale-60); font-size: 13px; }
 </style>
