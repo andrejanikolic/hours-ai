@@ -2,6 +2,8 @@
 
 Conventions for writing and reviewing tests. Applies to PHPUnit and Playwright.
 
+Aligned to the **serving-times** architecture (brands / venues / menus / order types).
+
 ---
 
 ## General principles
@@ -19,33 +21,37 @@ Conventions for writing and reviewing tests. Applies to PHPUnit and Playwright.
 ### PHPUnit
 
 ```
-tests/Feature/StoreHoursParseTest.php
-tests/Feature/StoreHoursUpdateTest.php
-tests/Unit/DeepSeekHoursParserTest.php
+tests/Feature/ServingTimesControllerTest.php
+tests/Feature/BrandControllerTest.php
+tests/Feature/VenueControllerTest.php
+tests/Feature/MenuControllerTest.php
+tests/Feature/OrderTypeControllerTest.php
+tests/Unit/DeepSeekServingTimesParserTest.php
 ```
 
-Method names (PHPUnit 11 style or descriptive):
+Method names (descriptive):
 
 ```php
-public function test_parse_returns_valid_schema_for_standard_week_prompt(): void
+public function test_parse_returns_preview_for_standard_week_prompt(): void
 public function test_parse_returns_clarification_for_ambiguous_input(): void
-public function test_update_persists_hours_to_database(): void
-public function test_update_rolls_back_on_validation_error(): void
+public function test_replace_removes_existing_and_inserts_new(): void
+public function test_replace_rejects_overlapping_days_within_batch(): void
+public function test_replace_is_atomic_and_only_affects_given_parent(): void
 ```
 
 ### Playwright
 
 ```
-e2e/tests/parse-and-preview.spec.ts
-e2e/tests/apply-hours.spec.ts
+e2e/tests/brand-serving-times-ai.spec.ts
+e2e/tests/brand-serving-times-clarification.spec.ts
 ```
 
 Test titles — behavior in plain English:
 
 ```ts
-test('shows preview table with closed Sunday after parse', ...)
-test('sends PATCH with seven days when Apply is clicked', ...)
-test('does not call PATCH when Edit is clicked', ...)
+test('shows preview rows with closed Sunday after parse', ...)
+test('sends PUT /serving-times/replace when Apply is clicked', ...)
+test('does not call replace when Edit is clicked', ...)
 ```
 
 ---
@@ -68,18 +74,21 @@ page.locator('.btn-apply')
 page.locator('div.preview > table > tbody > tr:nth-child(1)')
 ```
 
+`AppButton`'s template root is the `<button>` element, so a `data-testid` set on `<AppButton data-testid="…">` falls through onto the button.
+
 ### Required `data-testid` values
 
 | UI | testid |
 |----|--------|
-| Hours textarea | `hours-input` |
+| Prompt textarea | `hours-prompt-input` |
 | Parse button | `hours-parse-btn` |
-| Preview section | `hours-preview` |
+| Preview container | `hours-preview` |
 | Apply button | `hours-apply-btn` |
 | Edit button | `hours-edit-btn` |
-| Success banner | `hours-success` |
-| Error banner | `hours-error` |
+| Success toast | `hours-success` |
+| Parse/apply error banner | `hours-error` |
 | Clarification banner | `hours-clarification` |
+| Manual serving-times list (`ServingTimesPanel`) | `serving-times-list` |
 
 Add testids in the same PR as the first E2E spec that needs them.
 
@@ -89,27 +98,38 @@ Add testids in the same PR as the first E2E spec that needs them.
 
 ### Parse response JSON
 
-Must match the API schema from [README.md](../README.md):
+Must match what `ServingTimesController::parse` returns:
 
 ```json
 {
-  "days": [
-    { "day": "monday", "open": "08:00", "close": "22:00", "closed": false }
+  "preview": [
+    {
+      "parent_type": "brand",
+      "parent_id": 1,
+      "type": "weekday",
+      "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+      "date": null,
+      "date_to": null,
+      "time_from": "08:00",
+      "time_to": "22:00",
+      "working": true
+    }
   ],
-  "specialClosures": [],
-  "orderCutoffMinutes": null,
-  "deliveryWindow": null,
-  "pickupWindow": null,
-  "clarification_needed": false
+  "should_update": true,
+  "clarification_needed": false,
+  "clarification_message": null
 }
 ```
 
 Rules:
 
-- All 7 days always present in `days`
-- Times in `HH:MM` 24-hour format
-- Day names lowercase full English (`monday`, not `Mon`)
-- `closed: true` → `open` and `close` may be `null`
+- `preview` is an array of serving-time rows; top-level keys are `preview`, `should_update`, `clarification_needed`, `clarification_message`.
+- `type` is `weekday` or `special`.
+- **Weekday rows:** `days` is a non-empty array of lowercase full English names (`monday`, not `Mon`); `date` / `date_to` are `null`.
+- **Special rows:** `date` (and optional `date_to`) in `Y-m-d`; `days` is `null`.
+- Times in `time_from` / `time_to` use `HH:MM` 24-hour format.
+- A closed period → `working: false` (times may be `null`).
+- Clarification path → `clarification_needed: true`, `clarification_message` set, `preview` empty, `should_update: false`.
 
 ### Prompt fixtures
 
@@ -122,7 +142,7 @@ export const CHRISTMAS_CLOSURE_PROMPT =
   'Close all online ordering on Christmas Day and New Year\'s Day.';
 ```
 
-Keep prompt strings identical to README demo prompts.
+Keep prompt strings identical to the demo prompts in [test-plan.md](./test-plan.md).
 
 ---
 
@@ -154,14 +174,14 @@ public function test_live_deepseek_standard_week(): void
 ### Database
 
 - Use `RefreshDatabase` or `DatabaseTransactions` in feature tests
-- Seed store `id = 1` for consistency with frontend `App.vue`
+- Seed data is created by `DatabaseSeeder`: brands Demo Burger (id 1), Pasta House (id 2), Starbird (id 3); the Demo Burger brand parent has a seeded weekday serving-time row
 - Assert DB state via Eloquent or `assertDatabaseHas`
 
 ### Assertions
 
 - Assert HTTP status first, then JSON shape, then specific values
 - Use `assertJsonStructure` for schema checks
-- Use `assertJsonPath` for nested fields
+- Use `assertJsonPath` for nested fields (e.g. `assertJsonPath('0.type', 'weekday')`)
 
 ---
 
@@ -183,17 +203,17 @@ Prefer `waitForRequest` / `waitForResponse` over inspecting `fetch` in the brows
 
 ```ts
 const response = await page.waitForResponse(
-  (res) => res.url().includes('/hours/parse') && res.status() === 200,
+  (res) => res.url().includes('/serving-times/parse') && res.status() === 200,
 );
 const body = await response.json();
-expect(body.days).toHaveLength(7);
+expect(Array.isArray(body.preview)).toBe(true);
 ```
 
 ### Files and artifacts
 
 - Traces: `on-first-retry` (config default)
 - Screenshots: `only-on-failure`
-- Commit `playwright-report/` and `test-results/` to **gitignore**
+- Add `playwright-report/` and `test-results/` to `.gitignore`
 
 ---
 
@@ -202,9 +222,9 @@ expect(body.days).toHaveLength(7);
 Before merging test PRs:
 
 - [ ] Does this test belong in the right layer? (see [testing-strategy.md](./testing-strategy.md))
-- [ ] Playwright tests mock DeepSeek / parse endpoint?
+- [ ] Playwright tests mock the `/serving-times/parse` endpoint?
 - [ ] `data-testid` used instead of CSS selectors?
-- [ ] Fixture JSON matches API schema?
+- [ ] Fixture JSON matches the `preview` parse schema?
 - [ ] Test name describes user-visible or API behavior?
 - [ ] No `waitForTimeout` / `sleep()`?
 - [ ] PHPUnit live integration tests marked `@group integration`?
@@ -216,12 +236,13 @@ Before merging test PRs:
 ```bash
 # Backend
 docker compose exec app php artisan test
+docker compose exec app php artisan test --filter ServingTimesControllerTest
 docker compose exec app php artisan test --group=integration
 
 # E2E (backend + frontend must be running)
 cd e2e && npx playwright test
 cd e2e && npx playwright test --ui
-cd e2e && npx playwright test apply-hours.spec.ts
+cd e2e && npx playwright test brand-serving-times-ai.spec.ts
 
 # Reset DB before E2E suite
 docker compose exec app php artisan migrate:fresh --seed

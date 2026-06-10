@@ -135,6 +135,7 @@ async function onApplyConfirm(): Promise<void> {
 
       <AppTextarea
         v-model="promptText"
+        test-id="hours-prompt-input"
         :placeholder="placeholder"
         :rows="4"
         :maxlength="1000"
@@ -142,24 +143,24 @@ async function onApplyConfirm(): Promise<void> {
       />
 
       <div class="card__actions">
-        <AppButton variant="primary" :loading="parsing" :disabled="!canParse" @click="onParse">
+        <AppButton data-testid="hours-parse-btn" variant="primary" :loading="parsing" :disabled="!canParse" @click="onParse">
           Parse with HoursAI
         </AppButton>
       </div>
 
-      <p v-if="parseError" class="banner banner--error">{{ parseError }}</p>
+      <p v-if="parseError" data-testid="hours-error" class="banner banner--error">{{ parseError }}</p>
     </section>
 
     <!-- Clarification needed -->
-    <section v-else-if="result.clarification_needed" class="banner banner--warning">
+    <section v-else-if="result.clarification_needed" data-testid="hours-clarification" class="banner banner--warning">
       <strong>Need a bit more detail.</strong>
       <p>{{ result.clarification_message ?? 'Try rephrasing with specific days or times.' }}</p>
-      <AppButton variant="secondary" size="sm" @click="onEdit">Edit prompt</AppButton>
+      <AppButton data-testid="hours-edit-btn" variant="secondary" size="sm" @click="onEdit">Edit prompt</AppButton>
     </section>
 
     <!-- Preview + apply -->
     <template v-else>
-      <section class="card card--preview">
+      <section data-testid="hours-preview" class="card card--preview">
         <header class="card__head">
           <h3 class="card__title">
             <span class="card__sparkle" aria-hidden="true">✦</span>
@@ -172,7 +173,7 @@ async function onApplyConfirm(): Promise<void> {
         <ServingTimesDiff :current="currentItems" :proposed="result.serving_times" />
       </section>
 
-      <p v-if="applyError" class="banner banner--error">{{ applyError }}</p>
+      <p v-if="applyError" data-testid="hours-error" class="banner banner--error">{{ applyError }}</p>
 
       <ConfirmDelete
         v-if="confirmingApply"
@@ -184,8 +185,8 @@ async function onApplyConfirm(): Promise<void> {
       />
 
       <div v-else class="apply-row">
-        <AppButton variant="secondary" :disabled="applying" @click="onEdit">Edit prompt</AppButton>
-        <AppButton variant="primary" :disabled="!canApply" @click="confirmingApply = true">
+        <AppButton data-testid="hours-edit-btn" variant="secondary" :disabled="applying" @click="onEdit">Edit prompt</AppButton>
+        <AppButton data-testid="hours-apply-btn" variant="primary" :disabled="!canApply" @click="confirmingApply = true">
           Apply
         </AppButton>
       </div>

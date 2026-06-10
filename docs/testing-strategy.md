@@ -2,6 +2,8 @@
 
 This document defines **what** each test layer is responsible for. Follow it before adding new tests.
 
+Aligned to the **serving-times** architecture (brands / venues / menus / order types). The legacy `/stores/{id}/hours` scaffold is P2.
+
 ---
 
 ## Testing pyramid
@@ -22,18 +24,19 @@ This document defines **what** each test layer is responsible for. Follow it bef
 | Playwright | `e2e/tests/` | Slower | Yes (with mocks) |
 | Live DeepSeek | Manual / optional integration test | Slow | No |
 
+**Current status:** PHPUnit coverage is largely built (Brand / Venue / Menu / OrderType / ServingTimes controller tests + `DeepSeekServingTimesParser` unit test). The `e2e/` Playwright layer is **not yet started** — it is the main outstanding gap.
+
 ---
 
 ## Ownership by task
 
-Maps to [README.md](../README.md) atomic tasks.
-
 | Task | Layer | What to prove |
 |------|-------|---------------|
-| **Task 1** — Parse endpoint | PHPUnit Feature | Valid JSON for fixtures, `clarification_needed`, no 500 |
-| **Task 2** — DeepSeek service | PHPUnit Unit + optional live integration | Schema, partial updates, no hallucinated fields |
-| **Task 3** — Vue component | Playwright E2E | Textarea → Parse → preview → Apply/Edit |
-| **Task 4** — Write-back | PHPUnit Feature | DB state after PATCH, rollback on 422 |
+| **Parse endpoint** — `POST /api/serving-times/parse` | PHPUnit Feature | `preview` array for fixtures, `clarification_needed`, never 500 |
+| **DeepSeek service** — `DeepSeekServingTimesParser` | PHPUnit Unit + optional live integration | Schema, partial updates, no hallucinated fields, markdown-fence stripping |
+| **Vue component** — `HoursAIPrompt` | Playwright E2E | Textarea → Parse → preview → Apply / Edit |
+| **Write-back** — `PUT /api/serving-times/replace` | PHPUnit Feature | DB state after replace, overlap 422, transactional rollback |
+| **Entity CRUD** — brands / venues / menus / order types | PHPUnit Feature | GET / POST / PUT / DELETE, nesting, attach/detach |
 
 ---
 
@@ -41,10 +44,11 @@ Maps to [README.md](../README.md) atomic tasks.
 
 **Test here:**
 
-- `POST /api/stores/{id}/hours/parse` response shape
-- `PATCH /api/stores/{id}/hours` persistence and validation
-- `DeepSeekHoursParser` with **mocked** HTTP client
-- Transaction rollback on validation errors
+- `POST /api/serving-times/parse` response shape (`preview`, `should_update`, `clarification_needed`, `clarification_message`)
+- `PUT /api/serving-times/replace` persistence, overlap validation, atomic rollback
+- `serving-times` CRUD (`GET` / `POST` / `PUT` / `DELETE`)
+- `DeepSeekServingTimesParser` with **mocked** HTTP client
+- Entity APIs (brand / venue / menu / order-type)
 - All 5 fixture prompts (as feature/unit tests)
 
 **Do not test here:**
@@ -56,10 +60,11 @@ Maps to [README.md](../README.md) atomic tasks.
 
 ```bash
 docker compose exec app php artisan test
-docker compose exec app php artisan test --filter StoreHoursParseTest
+docker compose exec app php artisan test --filter ServingTimesControllerTest
+docker compose exec app php artisan test --filter DeepSeekServingTimesParserTest
 ```
 
-**Fixture location:** `backend/tests/fixtures/` (JSON or PHP arrays shared with E2E where possible).
+**Fixture location:** `backend/tests/fixtures/serving-times/` (JSON or PHP arrays shared with E2E where possible).
 
 ---
 
@@ -68,18 +73,19 @@ docker compose exec app php artisan test --filter StoreHoursParseTest
 **Test here:**
 
 - Operator types prompt → clicks Parse → preview renders
-- Apply sends `PATCH` with expected payload
+- Apply sends `PUT /serving-times/replace` with the expected payload
 - Success toast appears after Apply
-- Edit returns to textarea without PATCH
+- Edit returns to textarea without a replace call
 - Clarification / error states render correctly
+- Core navigation: pick brand → tab → venue/menu/order-type detail → prompt
 
 **Do not test here:**
 
 - DeepSeek prompt engineering quality
-- Every API edge case (PHPUnit owns those)
-- Duplicate all 5 prompts if PHPUnit already covers schema — use 2–3 representative UI flows
+- Every API edge case (PHPUnit owns those — and they are already built)
+- Duplicating all 5 prompts if PHPUnit already covers schema — use 2–3 representative UI flows
 
-**Golden rule:** Mock `POST .../hours/parse` in Playwright. See [playwright-architecture.md](./playwright-architecture.md).
+**Golden rule:** Mock `POST **/serving-times/parse` in Playwright. See [playwright-architecture.md](./playwright-architecture.md).
 
 ---
 
@@ -94,7 +100,7 @@ docker compose exec app php artisan test --filter StoreHoursParseTest
 Never depend on live DeepSeek for:
 
 - CI pipelines
-- Thursday demo test run
+- The demo test run
 - Playwright `test` command
 
 ---
@@ -104,11 +110,11 @@ Never depend on live DeepSeek for:
 Use the same JSON shapes in both layers:
 
 ```
-e2e/fixtures/responses/standard-week.json
-backend/tests/fixtures/standard-week.json   ← same content
+e2e/fixtures/responses/serving-times/standard-week.json
+backend/tests/fixtures/serving-times/standard-week.json   ← same content
 ```
 
-The 5 demo prompts from README:
+The 5 demo prompts:
 
 1. Mon–Fri 8am–10pm, Sat 9am–11pm, closed Sundays
 2. Close all online ordering on Christmas and New Year's
@@ -124,15 +130,17 @@ PHPUnit validates parsing logic against all 5. Playwright uses 2–3 mocked resp
 
 | Role | Owns |
 |------|------|
-| **Backend** | PHPUnit, fixture JSON, `Http::fake()` for DeepSeek |
-| **Frontend** | `data-testid` attributes in `StoreHoursNaturalInput.vue` |
+| **Backend** | PHPUnit (built), fixture JSON, `Http::fake()` for DeepSeek |
+| **Frontend** | `data-testid` attributes in `HoursAIPrompt.vue` and nav/list elements |
 | **QA / full-stack** | `e2e/` scaffold, Playwright config, mock helpers, green suite |
 
 ---
 
 ## Definition of done (testing)
 
-- [ ] PHPUnit green for Tasks 1, 2, 4
-- [ ] Playwright green for Task 3 harness (5–6 specs)
+- [x] PHPUnit green for serving-times parse / replace / CRUD + parser unit
+- [x] PHPUnit green for entity APIs (brand / venue / menu / order-type)
+- [ ] `data-testid` added to `HoursAIPrompt.vue`
+- [ ] Playwright green for the core operator journey (5–6 specs)
 - [ ] No live DeepSeek in `playwright test` or CI
 - [ ] Demo can run `npx playwright test` and show green before pitch

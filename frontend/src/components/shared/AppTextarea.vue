@@ -8,6 +8,7 @@ defineProps<{
   rows?: number
   id?: string
   maxlength?: number
+  testId?: string
 }>()
 
 defineEmits<{ (e: 'update:modelValue', value: string): void }>()
@@ -18,6 +19,7 @@ defineEmits<{ (e: 'update:modelValue', value: string): void }>()
     <span v-if="label" class="field__label">{{ label }}</span>
     <textarea
       :id="id"
+      :data-testid="testId"
       class="field__input"
       :rows="rows ?? 4"
       :value="modelValue"

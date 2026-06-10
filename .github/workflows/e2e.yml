@@ -1,0 +1,72 @@
+name: Tests (PHPUnit + Playwright)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The backend runs via docker compose (app + nginx on :8080 + mysql). The
+# frontend dev server is started by Playwright's webServer config. Both layers
+# mock DeepSeek, so no DEEPSEEK_API_KEY is needed.
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_BASE_URL: http://localhost:8080/api
+      FRONTEND_URL: http://localhost:5173
+      API_URL: http://localhost:8080/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start backend stack
+        run: docker compose up -d --build
+
+      - name: Wait for MySQL
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T mysql mysqladmin ping -h localhost --silent; then
+              echo "MySQL is up"; break
+            fi
+            echo "waiting for mysql ($i)…"; sleep 2
+          done
+
+      - name: Migrate + seed
+        run: docker compose exec -T app php artisan migrate:fresh --seed
+
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS http://localhost:8080/api/health; then echo " ok"; break; fi
+            echo "waiting for api ($i)…"; sleep 3
+          done
+
+      - name: PHPUnit
+        run: docker compose exec -T app php artisan test
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install e2e deps + browser
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: Playwright
+        run: npx playwright test
+        working-directory: e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7

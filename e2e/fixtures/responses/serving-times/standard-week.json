@@ -1,0 +1,34 @@
+{
+  "preview": [
+    {
+      "type": "weekday",
+      "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+      "date": null,
+      "date_to": null,
+      "time_from": "08:00",
+      "time_to": "22:00",
+      "working": true
+    },
+    {
+      "type": "weekday",
+      "days": ["saturday"],
+      "date": null,
+      "date_to": null,
+      "time_from": "09:00",
+      "time_to": "23:00",
+      "working": true
+    },
+    {
+      "type": "weekday",
+      "days": ["sunday"],
+      "date": null,
+      "date_to": null,
+      "time_from": null,
+      "time_to": null,
+      "working": false
+    }
+  ],
+  "should_update": true,
+  "clarification_needed": false,
+  "clarification_message": null
+}
