@@ -82,6 +82,39 @@ const targets = computed(() =>
 
 const canPreview = computed(() => prompt.value.trim().length > 0 && !parsing.value && targets.value.length > 0)
 
+const PROMPTS: Record<string, { label: string; text: string }[]> = {
+  brand: [
+    { label: 'Standard week',    text: 'Open Monday to Friday 9am to 10pm, Saturday 10am to 11pm, closed Sundays' },
+    { label: 'Every day',        text: 'Open every day 10am to 10pm' },
+    { label: 'Holiday closure',  text: 'Closed December 25 and January 1' },
+  ],
+  venue: [
+    { label: 'Standard week',    text: 'Open Monday to Friday 9am to 10pm, Saturday 10am to 11pm, closed Sundays' },
+    { label: 'Every day',        text: 'Open every day 10am to 11pm' },
+    { label: 'Late night Fri–Sat', text: 'Open Mon–Thu 11am to 10pm, Friday and Saturday 11am to midnight, closed Sundays' },
+    { label: 'Holiday closure',  text: 'Closed Christmas Day December 25' },
+  ],
+  menu: [
+    { label: 'Breakfast',        text: 'Available every day 7am to 11am' },
+    { label: 'Lunch',            text: 'Open Monday to Friday 11am to 3pm, weekends 11am to 4pm' },
+    { label: 'Dinner',           text: 'Available every day 5pm to 10pm, Friday and Saturday until midnight' },
+    { label: 'All day',          text: 'Open every day 10am to 10pm' },
+  ],
+  order_type: [
+    { label: 'Delivery hours',   text: 'Delivery available Monday to Friday 10am to 10pm, Saturday and Sunday 11am to 9pm' },
+    { label: 'Extended delivery', text: 'Available every day 9am to 11pm' },
+    { label: 'Weekdays only',    text: 'Available Monday to Friday 11am to 9pm, closed weekends' },
+    { label: 'Holiday cutoff',   text: 'Closed December 25 and January 1' },
+  ],
+  all: [
+    { label: 'Mon–Fri only',     text: 'Open Monday to Friday 9am to 10pm, closed weekends' },
+    { label: 'Every day',        text: 'Open every day 10am to 10pm' },
+    { label: 'Holiday closure',  text: 'Closed Christmas Day December 25' },
+  ],
+}
+
+const promptSuggestions = computed(() => PROMPTS[filter.value] ?? PROMPTS.all)
+
 const previewBlockedReason = computed(() => {
   if (parsing.value) return null
   if (!prompt.value.trim()) return 'Enter a prompt below'
@@ -375,9 +408,11 @@ onMounted(fetchAll)
 
       <div class="prompt-card__footer">
         <span class="prompt-examples">
-          Try: <em @click="prompt = 'Open Mon–Fri 8am to 10pm, closed weekends'">Mon–Fri only</em>
-          · <em @click="prompt = 'Open every day 10:00 to 23:00'">Every day</em>
-          · <em @click="prompt = 'Closed Christmas Day (Dec 25)'">Holiday closure</em>
+          Try:
+          <template v-for="(s, i) in promptSuggestions" :key="s.label">
+            <span v-if="i > 0" class="prompt-examples__sep">·</span>
+            <em @click="prompt = s.text">{{ s.label }}</em>
+          </template>
         </span>
         <div class="btn-wrap">
           <span v-if="previewBlockedReason" class="btn-blocked-reason">
@@ -724,7 +759,8 @@ th { padding: 0.65rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 6
 }
 .btn-wrap { display: flex; align-items: center; gap: 0.6rem; }
 .btn-blocked-reason { font-size: 0.8rem; color: #f59e0b; font-weight: 500; }
-.prompt-examples { font-size: 0.8rem; color: #94a3b8; }
+.prompt-examples { font-size: 0.8rem; color: #94a3b8; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.prompt-examples__sep { color: #cbd5e1; }
 .prompt-examples em {
   font-style: normal;
   color: #6366f1;
