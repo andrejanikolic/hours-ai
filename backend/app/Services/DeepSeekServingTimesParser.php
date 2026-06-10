@@ -1,0 +1,137 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
+class DeepSeekServingTimesParser
+{
+    private const VALID_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+    private const SCHEMA = <<<'JSON'
+    [
+      {
+        "type": "weekday",
+        "days": ["monday", "tuesday"],
+        "time_from": "09:00",
+        "time_to": "22:00",
+        "working": true
+      },
+      {
+        "type": "special",
+        "date": "2026-12-25",
+        "date_to": null,
+        "time_from": null,
+        "time_to": null,
+        "working": false
+      }
+    ]
+    JSON;
+
+    public function parse(string $prompt, array $currentServingTimes): array
+    {
+        $currentText = $this->formatCurrentTimes($currentServingTimes);
+
+        $systemPrompt = <<<PROMPT
+        You are a serving-times configuration assistant for a restaurant management system.
+
+        CURRENT SERVING TIMES:
+        {$currentText}
+
+        TASK: Parse the user's plain-English instruction into a JSON array of serving time objects.
+        Rules:
+        - Keep unchanged serving times from the CURRENT SERVING TIMES unless the instruction changes them.
+        - Use "weekday" type for recurring days-of-week schedules; use "special" type for specific date overrides.
+        - Times must be in HH:MM 24-hour format or null.
+        - For weekday entries, "days" must be an array of day names (lowercase).
+        - For special entries, "date" is required (YYYY-MM-DD); "date_to" is optional for date ranges.
+        - Set "working": false for closed periods.
+        - Return ONLY a valid JSON array matching this schema — no markdown, no explanation:
+
+        PROMPT . self::SCHEMA;
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . config('services.deepseek.api_key'),
+            'Content-Type'  => 'application/json',
+        ])->timeout(30)->post(config('services.deepseek.api_url') . '/chat/completions', [
+            'model'       => 'deepseek-chat',
+            'temperature' => 0,
+            'messages'    => [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user',   'content' => $prompt],
+            ],
+        ]);
+
+        if ($response->failed()) {
+            Log::error('DeepSeek API error', ['status' => $response->status(), 'body' => $response->body()]);
+            throw new \RuntimeException('DeepSeek API request failed: ' . $response->status());
+        }
+
+        $content = $response->json('choices.0.message.content');
+        $content = $this->stripMarkdown($content);
+
+        $parsed = json_decode($content, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            Log::error('DeepSeek returned invalid JSON', ['content' => $content]);
+            throw new \RuntimeException('DeepSeek returned invalid JSON');
+        }
+
+        return [
+            'serving_times'        => $this->sanitizeRows($parsed),
+            'clarification_needed' => false,
+        ];
+    }
+
+    private function formatCurrentTimes(array $times): string
+    {
+        if (empty($times)) {
+            return 'None configured.';
+        }
+
+        return collect($times)->map(function ($t) {
+            if ($t['type'] === 'weekday') {
+                $days = implode(', ', $t['days'] ?? []);
+                $hours = $t['working']
+                    ? ($t['time_from'] . '-' . $t['time_to'])
+                    : 'closed';
+                return "Weekday [{$days}]: {$hours}";
+            }
+
+            $range = $t['date_to'] ? "{$t['date']} to {$t['date_to']}" : $t['date'];
+            $hours = $t['working']
+                ? ($t['time_from'] . '-' . $t['time_to'])
+                : 'closed';
+            return "Special [{$range}]: {$hours}";
+        })->implode("\n");
+    }
+
+    private function stripMarkdown(string $content): string
+    {
+        $content = preg_replace('/```(?:json)?\s*([\s\S]*?)```/', '$1', $content);
+
+        return trim($content);
+    }
+
+    private function sanitizeRows(array $rows): array
+    {
+        $allowed = ['type', 'days', 'date', 'date_to', 'time_from', 'time_to', 'working'];
+
+        return array_map(function ($row) use ($allowed) {
+            $clean = array_intersect_key($row, array_flip($allowed));
+
+            $clean['working'] = (bool) ($clean['working'] ?? true);
+
+            if (($clean['type'] ?? '') === 'weekday' && isset($clean['days'])) {
+                $clean['days'] = array_values(
+                    array_filter($clean['days'], fn($d) => in_array($d, self::VALID_DAYS))
+                );
+            }
+
+            return $clean;
+        }, $rows);
+    }
+}
