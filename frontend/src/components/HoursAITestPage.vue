@@ -149,8 +149,9 @@ async function fetchAll() {
     }
   }
 
+  const deliveryOrderTypes = ['delivery', 'catering-delivery']
   const orderTypes = await fetch(`${API}/order-types`).then(r => r.json())
-  for (const ot of orderTypes) {
+  for (const ot of orderTypes.filter((o: any) => deliveryOrderTypes.includes(o.slug))) {
     result.push({ entityType: 'order_type', entityId: ot.id, name: ot.name, parentName: '', servingTimes: ot.serving_times ?? [] })
   }
 
