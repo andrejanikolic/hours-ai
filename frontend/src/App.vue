@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute, RouterLink, RouterView } from 'vue-router'
 import parLogo from './assets/par-logo.svg'
+import ToastStack from './components/shared/ToastStack.vue'
 
 const route = useRoute()
 
@@ -90,8 +91,12 @@ const testActive = computed(() => route.path.startsWith('/test'))
     </aside>
 
     <main class="main">
-      <RouterView />
+      <div class="main__inner">
+        <RouterView />
+      </div>
     </main>
+
+    <ToastStack />
   </div>
 </template>
 
@@ -243,7 +248,12 @@ const testActive = computed(() => route.path.startsWith('/test'))
 .main {
   margin-top: 60px;
   margin-left: 240px;
-  padding: 24px 32px 48px;
   min-height: calc(100vh - 60px);
+}
+
+.main__inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 32px 48px;
 }
 </style>

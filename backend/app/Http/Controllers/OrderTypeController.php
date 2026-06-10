@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\Brand;
 use App\Models\OrderType;
 use App\Models\Venue;
 use Illuminate\Http\JsonResponse;
@@ -17,8 +18,10 @@ class OrderTypeController extends Controller
         return response()->json(OrderType::all());
     }
 
-    public function venueOrderTypes(Venue $venue): JsonResponse
+    public function venueOrderTypes(Brand $brand, Venue $venue): JsonResponse
     {
+        abort_if($venue->brand_id !== $brand->id, 404);
+
         $orderTypes = $venue->orderTypes()->get()->map(function ($ot) use ($venue) {
             $votId = DB::table('venue_order_types')
                 ->where('venue_id', $venue->id)
@@ -40,8 +43,10 @@ class OrderTypeController extends Controller
         return response()->json($orderTypes);
     }
 
-    public function attachToVenue(Request $request, Venue $venue): JsonResponse
+    public function attachToVenue(Request $request, Brand $brand, Venue $venue): JsonResponse
     {
+        abort_if($venue->brand_id !== $brand->id, 404);
+
         $data = $request->validate([
             'order_type_id' => 'required|exists:order_types,id',
         ]);
@@ -66,8 +71,10 @@ class OrderTypeController extends Controller
         return response()->json(['venue_order_type_id' => $id], 201);
     }
 
-    public function detachFromVenue(Venue $venue, int $orderTypeId): JsonResponse
+    public function detachFromVenue(Brand $brand, Venue $venue, int $orderTypeId): JsonResponse
     {
+        abort_if($venue->brand_id !== $brand->id, 404);
+
         $deleted = DB::table('venue_order_types')
             ->where('venue_id', $venue->id)
             ->where('order_type_id', $orderTypeId)
