@@ -1,0 +1,25 @@
+{
+  "preview": [
+    {
+      "type": "special",
+      "days": null,
+      "date": "2026-12-25",
+      "date_to": null,
+      "time_from": null,
+      "time_to": null,
+      "working": false
+    },
+    {
+      "type": "special",
+      "days": null,
+      "date": "2027-01-01",
+      "date_to": null,
+      "time_from": null,
+      "time_to": null,
+      "working": false
+    }
+  ],
+  "should_update": true,
+  "clarification_needed": false,
+  "clarification_message": null
+}
