@@ -227,20 +227,17 @@ const detectedTargets = computed(() => {
   })
 })
 
-// A venue named in the prompt wins over the checkboxes; otherwise use selection.
-const targets = computed(() =>
-  detectedTargets.value.length
-    ? detectedTargets.value
-    : filteredRows.value.filter((r) => selectedKeys.value.has(r.rowKey)),
-)
-const canParse = computed(
-  () => prompt.value.trim().length > 0 && !parsing.value && targets.value.length > 0,
-)
-const parseBlockedReason = computed(() => {
-  if (!prompt.value.trim()) return 'Type a prompt above'
-  if (!targets.value.length) return 'Select channels, or name a venue in your prompt'
-  return null
+// A venue named in the prompt wins over the checkboxes; then any explicit
+// selection; otherwise fall back to all currently visible channels.
+const targets = computed(() => {
+  if (detectedTargets.value.length) return detectedTargets.value
+  const selected = filteredRows.value.filter((r) => selectedKeys.value.has(r.rowKey))
+  return selected.length ? selected : filteredRows.value
 })
+const canParse = computed(() => prompt.value.trim().length > 0 && !parsing.value)
+const parseBlockedReason = computed(() =>
+  prompt.value.trim() ? null : 'Type a prompt above',
+)
 
 async function onParse(): Promise<void> {
   if (!canParse.value) return
@@ -603,8 +600,7 @@ function rowLabel(p: RowPreview): string {
             </template>
             <template v-else-if="parsing">Asking HoursAI…</template>
             <template v-else>
-              Preview with HoursAI · {{ targets.length }}
-              {{ targets.length === 1 ? 'channel' : 'channels' }}
+              Preview with HoursAI
             </template>
           </AppButton>
         </div>
@@ -769,11 +765,19 @@ function rowLabel(p: RowPreview): string {
   color: var(--grayscale-80);
   transition: background-color 0.12s, color 0.12s, border-color 0.12s;
 }
-.pill:hover { border-color: var(--primary-accent-40); color: var(--primary-accent-100); }
+.pill:not(.pill--active):hover { border-color: var(--primary-accent-40); color: var(--primary-accent-100); }
 .pill--active {
   background: var(--primary-accent-100);
   color: var(--white);
   border-color: var(--primary-accent-100);
+}
+/* Keep the label readable when the active pill is hovered or focused. */
+.pill--active:hover,
+.pill--active:focus,
+.pill--active:focus-visible {
+  background: var(--primary-accent-80);
+  color: var(--white);
+  border-color: var(--primary-accent-80);
 }
 .pill__count {
   display: inline-flex;

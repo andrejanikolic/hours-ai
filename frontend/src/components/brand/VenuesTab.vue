@@ -140,20 +140,17 @@ const detectedTargets = computed(() => {
   return venues.value.filter((v) => promptMentions(prompt.value, v.name))
 })
 
-// A name in the prompt wins over the checkboxes; otherwise fall back to selection.
-const targets = computed(() =>
-  detectedTargets.value.length
-    ? detectedTargets.value
-    : venues.value.filter((v) => selectedIds.value.has(v.id)),
-)
-const canParse = computed(
-  () => prompt.value.trim().length > 0 && !parsing.value && targets.value.length > 0,
-)
-const parseBlockedReason = computed(() => {
-  if (!prompt.value.trim()) return 'Type a prompt above'
-  if (!targets.value.length) return 'Select venues, or name them in your prompt'
-  return null
+// A name in the prompt wins over the checkboxes; then any explicit selection;
+// otherwise fall back to all venues.
+const targets = computed(() => {
+  if (detectedTargets.value.length) return detectedTargets.value
+  const selected = venues.value.filter((v) => selectedIds.value.has(v.id))
+  return selected.length ? selected : venues.value
 })
+const canParse = computed(() => prompt.value.trim().length > 0 && !parsing.value)
+const parseBlockedReason = computed(() =>
+  prompt.value.trim() ? null : 'Type a prompt above',
+)
 
 async function onParse(): Promise<void> {
   if (!canParse.value) return
@@ -476,8 +473,7 @@ function timeRange(s: ServingTime): string {
             </template>
             <template v-else-if="parsing">Asking HoursAI…</template>
             <template v-else>
-              Preview with HoursAI · {{ targets.length }}
-              {{ targets.length === 1 ? 'venue' : 'venues' }}
+              Preview with HoursAI
             </template>
           </AppButton>
         </div>
