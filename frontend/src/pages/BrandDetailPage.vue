@@ -56,7 +56,7 @@ watch(brand, (b) => {
   </div>
 
   <template v-else>
-    <PageHeader :title="brand.name" :subtitle="brand.slug" back-to="/brands" back-label="All brands" />
+    <PageHeader :title="brand.name" :subtitle="brand.slug" back-to="/" back-label="Home" />
     <TabBar v-model="activeTab" :tabs="tabs" />
 
     <div class="tab-content">

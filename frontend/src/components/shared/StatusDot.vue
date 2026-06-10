@@ -16,7 +16,7 @@ defineProps<{
 </script>
 
 <template>
-  <span class="dot-row">
+  <span class="dot-row" :class="`dot-row--${status}`">
     <span class="dot" :class="`dot--${status}`" aria-hidden="true"></span>
     <span v-if="label" class="dot-row__label">{{ label }}</span>
   </span>
@@ -29,6 +29,12 @@ defineProps<{
   gap: 6px;
   font-size: 13px;
   color: var(--grayscale-80);
+}
+
+.dot-row--closed,
+.dot-row--error {
+  color: var(--status-error);
+  font-weight: var(--font-weight-semibold);
 }
 
 .dot {

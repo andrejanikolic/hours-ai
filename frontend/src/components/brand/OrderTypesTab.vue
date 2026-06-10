@@ -5,6 +5,7 @@ import { useVenueOrderTypes } from '../../composables/useVenueOrderTypes'
 import { useServingTimes } from '../../composables/useServingTimes'
 import { useToast } from '../../composables/useToast'
 import { ApiError } from '../../composables/useApi'
+import { sameSchedule } from '../../composables/scheduleCompare'
 import type { ParseResult, ServingTime } from '../../types'
 
 import AppButton from '../shared/AppButton.vue'
@@ -35,6 +36,7 @@ interface RowPreview {
   proposed: ParseResult
   error?: string
   skipped: boolean
+  noChange: boolean
 }
 
 const rows = ref<Row[]>([])
@@ -203,6 +205,9 @@ async function onParse(): Promise<void> {
             row: { ...row, current },
             proposed,
             skipped: false,
+            noChange:
+              proposed.serving_times.length > 0 &&
+              sameSchedule(current, proposed.serving_times),
           }
         } catch (e) {
           return {
@@ -215,6 +220,7 @@ async function onParse(): Promise<void> {
             },
             error: e instanceof ApiError ? e.message : 'Network error',
             skipped: true,
+            noChange: false,
           }
         }
       }),
@@ -249,8 +255,20 @@ const applyableCount = computed(
         !p.skipped &&
         !p.error &&
         !p.proposed.clarification_needed &&
-        p.proposed.serving_times.length > 0,
+        p.proposed.serving_times.length > 0 &&
+        !p.noChange,
     ).length,
+)
+
+const allNoChange = computed(
+  () =>
+    previews.value.length > 0 &&
+    previews.value.every(
+      (p) =>
+        !p.error &&
+        !p.proposed.clarification_needed &&
+        p.noChange,
+    ),
 )
 
 async function onApply(): Promise<void> {
@@ -259,7 +277,8 @@ async function onApply(): Promise<void> {
       !p.skipped &&
       !p.error &&
       !p.proposed.clarification_needed &&
-      p.proposed.serving_times.length > 0,
+      p.proposed.serving_times.length > 0 &&
+      !p.noChange,
   )
   if (!toApply.length) return
 
@@ -397,7 +416,12 @@ function rowLabel(p: RowPreview): string {
                   class="row__hours-slot"
                 >
                   <DayChips :model-value="s.days || []" :interactive="false" />
-                  <span class="row__hours-time">{{ timeRange(s) }}</span>
+                  <span
+                    class="row__hours-time"
+                    :class="{ 'row__hours-time--closed': !s.working }"
+                  >
+                    {{ timeRange(s) }}
+                  </span>
                 </span>
                 <span
                   v-for="s in specialSlots(r.current)"
@@ -473,93 +497,123 @@ function rowLabel(p: RowPreview): string {
 
       <!-- Previews -->
       <section v-if="previews.length" class="previews">
-        <header class="previews__head">
-          <div>
-            <h3 class="previews__title">Preview ✦</h3>
-            <p class="previews__sub">
-              Review each delivery channel before applying. Uncheck any you want to skip.
+        <div v-if="allNoChange" class="no-changes">
+          <span class="no-changes__icon" aria-hidden="true">✓</span>
+          <div class="no-changes__text">
+            <strong>Nothing to apply.</strong>
+            <p>
+              HoursAI returned the same schedule for all
+              {{ previews.length }} selected
+              {{ previews.length === 1 ? 'channel' : 'channels' }} — nothing has changed.
             </p>
           </div>
-          <div class="previews__actions">
-            <AppButton variant="ghost" :disabled="applying" @click="onCancel">
-              Cancel
-            </AppButton>
-            <AppButton variant="secondary" :disabled="applying" @click="onEdit">
-              Edit prompt
-            </AppButton>
-            <AppButton
-              variant="primary"
-              :loading="applying"
-              :disabled="!applyableCount || applying"
-              @click="onApply"
-            >
-              Apply to {{ applyableCount }}
-              {{ applyableCount === 1 ? 'channel' : 'channels' }}
-            </AppButton>
+          <div class="no-changes__actions">
+            <AppButton variant="ghost" @click="onCancel">Cancel</AppButton>
+            <AppButton variant="secondary" @click="onEdit">Edit prompt</AppButton>
           </div>
-        </header>
+        </div>
 
-        <article
-          v-for="p in previews"
-          :key="p.rowKey"
-          class="card preview-card"
-          :class="{ 'preview-card--skipped': p.skipped }"
-        >
-          <header class="preview-card__head">
-            <label
-              v-if="!p.error && !p.proposed.clarification_needed && p.proposed.serving_times.length"
-              class="check"
-              @click.stop
-            >
-              <input
-                type="checkbox"
-                :checked="!p.skipped"
-                @change="toggleSkip(p)"
-              />
-              <span class="check__box"></span>
-            </label>
-            <span v-else class="preview-card__check-spacer"></span>
-
-            <h4 class="preview-card__name">{{ rowLabel(p) }}</h4>
-
-            <span v-if="p.error" class="preview-card__status preview-card__status--error">
-              Error
-            </span>
-            <span
-              v-else-if="p.proposed.clarification_needed"
-              class="preview-card__status preview-card__status--warn"
-            >
-              Needs clarification
-            </span>
-            <span
-              v-else-if="!p.proposed.serving_times.length"
-              class="preview-card__status preview-card__status--neutral"
-            >
-              No slots returned
-            </span>
-            <span
-              v-else-if="p.skipped"
-              class="preview-card__status preview-card__status--neutral"
-            >
-              Skipped
-            </span>
-            <span v-else class="preview-card__status preview-card__status--ok">Ready</span>
+        <template v-else>
+          <header class="previews__head">
+            <div>
+              <h3 class="previews__title">Preview ✦</h3>
+              <p class="previews__sub">
+                Review each delivery channel before applying. Uncheck any you want to skip.
+              </p>
+            </div>
+            <div class="previews__actions">
+              <AppButton variant="ghost" :disabled="applying" @click="onCancel">
+                Cancel
+              </AppButton>
+              <AppButton variant="secondary" :disabled="applying" @click="onEdit">
+                Edit prompt
+              </AppButton>
+              <AppButton
+                variant="primary"
+                :loading="applying"
+                :disabled="!applyableCount || applying"
+                @click="onApply"
+              >
+                Apply to {{ applyableCount }}
+                {{ applyableCount === 1 ? 'channel' : 'channels' }}
+              </AppButton>
+            </div>
           </header>
 
-          <div v-if="p.error" class="banner banner--error">
-            <strong>Couldn't parse.</strong>
-            <span>{{ p.error }}</span>
-          </div>
-          <div v-else-if="p.proposed.clarification_needed" class="banner banner--warning">
-            <strong>HoursAI needs more info.</strong>
-            <span>{{ p.proposed.clarification_message ?? 'Try rephrasing the prompt.' }}</span>
-          </div>
-          <ServingTimesDiff
-            v-else
-            :current="p.row.current"
-            :proposed="p.proposed.serving_times"
-          />
-        </article>
+          <article
+            v-for="p in previews"
+            :key="p.rowKey"
+            class="card preview-card"
+            :class="{
+              'preview-card--skipped': p.skipped,
+              'preview-card--muted': p.noChange,
+            }"
+          >
+            <header class="preview-card__head">
+              <label
+                v-if="!p.error && !p.proposed.clarification_needed && p.proposed.serving_times.length && !p.noChange"
+                class="check"
+                @click.stop
+              >
+                <input
+                  type="checkbox"
+                  :checked="!p.skipped"
+                  @change="toggleSkip(p)"
+                />
+                <span class="check__box"></span>
+              </label>
+              <span v-else class="preview-card__check-spacer"></span>
+
+              <h4 class="preview-card__name">{{ rowLabel(p) }}</h4>
+
+              <span v-if="p.error" class="preview-card__status preview-card__status--error">
+                Error
+              </span>
+              <span
+                v-else-if="p.proposed.clarification_needed"
+                class="preview-card__status preview-card__status--warn"
+              >
+                Needs clarification
+              </span>
+              <span
+                v-else-if="!p.proposed.serving_times.length"
+                class="preview-card__status preview-card__status--neutral"
+              >
+                No slots returned
+              </span>
+              <span
+                v-else-if="p.noChange"
+                class="preview-card__status preview-card__status--neutral"
+              >
+                No change
+              </span>
+              <span
+                v-else-if="p.skipped"
+                class="preview-card__status preview-card__status--neutral"
+              >
+                Skipped
+              </span>
+              <span v-else class="preview-card__status preview-card__status--ok">Ready</span>
+            </header>
+
+            <div v-if="p.error" class="banner banner--error">
+              <strong>Couldn't parse.</strong>
+              <span>{{ p.error }}</span>
+            </div>
+            <div v-else-if="p.proposed.clarification_needed" class="banner banner--warning">
+              <strong>HoursAI needs more info.</strong>
+              <span>{{ p.proposed.clarification_message ?? 'Try rephrasing the prompt.' }}</span>
+            </div>
+            <p v-else-if="p.noChange" class="preview-card__no-change">
+              HoursAI returned the same schedule that's already saved — nothing to update for this channel.
+            </p>
+            <ServingTimesDiff
+              v-else
+              :current="p.row.current"
+              :proposed="p.proposed.serving_times"
+            />
+          </article>
+        </template>
       </section>
     </template>
   </div>
@@ -709,7 +763,15 @@ function rowLabel(p: RowPreview): string {
   gap: 8px;
   flex-wrap: wrap;
 }
-.row__hours-time { font-variant-numeric: tabular-nums; }
+.row__hours-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--grayscale-100);
+}
+.row__hours-time--closed {
+  color: var(--status-error);
+  font-weight: var(--font-weight-semibold);
+}
 
 .row__hours-special {
   display: inline-flex;
@@ -722,8 +784,8 @@ function rowLabel(p: RowPreview): string {
   width: fit-content;
 }
 .row__hours-special--closed {
-  background: var(--status-warning-15);
-  color: var(--status-activating);
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--status-error);
 }
 .row__hours-special--open {
   background: var(--status-success-15);
@@ -806,6 +868,44 @@ function rowLabel(p: RowPreview): string {
   transition: opacity 0.15s;
 }
 .preview-card--skipped { opacity: 0.5; }
+.preview-card--muted { opacity: 0.7; }
+
+.preview-card__no-change {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--grayscale-05);
+  color: var(--grayscale-60);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.no-changes {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  background: var(--status-success-15);
+  border: 1px solid rgba(68, 171, 11, 0.3);
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+.no-changes__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--status-success);
+  color: var(--white);
+  font-weight: var(--font-weight-bold);
+  flex-shrink: 0;
+}
+.no-changes__text { flex: 1; min-width: 240px; }
+.no-changes__text strong { color: var(--status-success); font-size: 14px; }
+.no-changes__text p { color: var(--grayscale-80); font-size: 13px; margin-top: 2px; }
+.no-changes__actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .preview-card__head {
   display: flex;
@@ -876,4 +976,23 @@ function rowLabel(p: RowPreview): string {
   color: var(--status-error);
 }
 .state--error span { color: var(--grayscale-60); font-size: 13px; }
+
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 32px 1fr;
+    grid-template-rows: auto auto;
+    row-gap: 8px;
+  }
+  .row__hours { grid-column: 2 / -1; }
+
+  .prompt-card { padding: 16px; }
+  .prompt-card__actions { flex-direction: column; align-items: stretch; }
+
+  .previews__head { flex-direction: column; align-items: stretch; }
+  .previews__actions { width: 100%; }
+  .previews__actions > * { flex: 1; }
+
+  .preview-card { padding: 14px; }
+  .preview-card__head { flex-wrap: wrap; }
+}
 </style>

@@ -116,4 +116,21 @@ const { toasts, dismiss } = useToast()
   position: absolute;
   right: 0;
 }
+
+@media (max-width: 640px) {
+  .toast-stack {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+  .toast {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+  .toast-enter-from,
+  .toast-leave-to {
+    transform: translateY(12px);
+  }
+}
 </style>

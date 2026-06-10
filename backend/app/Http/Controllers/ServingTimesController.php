@@ -138,13 +138,24 @@ class ServingTimesController extends Controller
             return response()->json(['message' => $conflict], 422);
         }
 
-        $rows = array_map(fn($st) => array_merge($st, [
+        // Normalize every row to the same set of columns. Mixing weekday rows
+        // (which carry `days`) with special rows (which carry `date`/`date_to`)
+        // would otherwise build a SQL column list from the first row's keys and
+        // explode with a column-count mismatch on subsequent rows.
+        $now = now();
+        $rows = array_map(fn($st) => [
             'parent_type' => $data['parent_type'],
             'parent_id'   => $data['parent_id'],
+            'type'        => $st['type'],
             'days'        => isset($st['days']) ? json_encode($st['days']) : null,
-            'created_at'  => now(),
-            'updated_at'  => now(),
-        ]), $data['serving_times']);
+            'date'        => $st['date'] ?? null,
+            'date_to'     => $st['date_to'] ?? null,
+            'time_from'   => $st['time_from'] ?? null,
+            'time_to'     => $st['time_to'] ?? null,
+            'working'     => $st['working'] ?? true,
+            'created_at'  => $now,
+            'updated_at'  => $now,
+        ], $data['serving_times']);
 
         DB::transaction(function () use ($data, $rows) {
             ServingTime::where('parent_type', $data['parent_type'])

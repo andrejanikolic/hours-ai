@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { DayName, ServingTime, ServingTimeInput } from '../../types'
+import { slotKey } from '../../composables/scheduleCompare'
 import DayChips from './DayChips.vue'
 import StatusDot from '../shared/StatusDot.vue'
 
@@ -20,14 +21,6 @@ interface AfterRow {
 const DAY_INDEX: Record<DayName, number> = {
   monday: 0, tuesday: 1, wednesday: 2, thursday: 3,
   friday: 4, saturday: 5, sunday: 6,
-}
-
-function slotKey(s: ServingTime | ServingTimeInput): string {
-  if (s.type === 'weekday') {
-    const days = [...(s.days ?? [])].sort().join(',')
-    return `weekday|${days}|${s.time_from ?? ''}|${s.time_to ?? ''}|${s.working}`
-  }
-  return `special|${s.date ?? ''}|${s.date_to ?? ''}|${s.time_from ?? ''}|${s.time_to ?? ''}|${s.working}`
 }
 
 function sortByContent<T extends ServingTime | ServingTimeInput>(items: T[]): T[] {
@@ -120,7 +113,9 @@ function timeLabel(s: { working: boolean; time_from: string | null | undefined; 
               {{ r.slot.date }}{{ r.slot.date_to ? ` → ${r.slot.date_to}` : '' }}
             </span>
           </div>
-          <span class="row__time">{{ timeLabel(r.slot) }}</span>
+          <span class="row__time" :class="{ 'row__time--closed': !r.slot.working }">
+          {{ timeLabel(r.slot) }}
+        </span>
           <StatusDot
             :status="r.slot.working ? 'open' : 'closed'"
             :label="r.slot.working ? 'Open' : 'Closed'"
@@ -154,7 +149,9 @@ function timeLabel(s: { working: boolean; time_from: string | null | undefined; 
               {{ s.date }}{{ s.date_to ? ` → ${s.date_to}` : '' }}
             </span>
           </div>
-          <span class="row__time">{{ timeLabel(s) }}</span>
+          <span class="row__time" :class="{ 'row__time--closed': !s.working }">
+            {{ timeLabel(s) }}
+          </span>
           <StatusDot
             :status="s.working ? 'open' : 'closed'"
             :label="s.working ? 'Open' : 'Closed'"
@@ -253,6 +250,10 @@ function timeLabel(s: { working: boolean; time_from: string | null | undefined; 
   font-size: 13px;
   color: var(--grayscale-80);
   font-variant-numeric: tabular-nums;
+}
+.row__time--closed {
+  color: var(--status-error);
+  font-weight: var(--font-weight-semibold);
 }
 
 .row__tag {

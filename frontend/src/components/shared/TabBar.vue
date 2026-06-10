@@ -39,7 +39,11 @@ defineEmits<{ (e: 'update:modelValue', id: string): void }>()
   display: flex;
   gap: 4px;
   border-bottom: 1px solid var(--grayscale-10);
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
+.tabs::-webkit-scrollbar { display: none; }
 
 .tabs__tab {
   position: relative;
@@ -47,6 +51,7 @@ defineEmits<{ (e: 'update:modelValue', id: string): void }>()
   align-items: center;
   gap: 6px;
   padding: 10px 14px;
+  flex-shrink: 0;
   font-size: 14px;
   color: var(--grayscale-60);
   font-weight: var(--font-weight-semibold);

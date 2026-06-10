@@ -16,6 +16,10 @@ const DAYS: DayDef[] = [
   { id: 'saturday', short: 'Sat' },
   { id: 'sunday', short: 'Sun' },
 ]
+const DAY_INDEX: Record<DayName, number> = {
+  monday: 0, tuesday: 1, wednesday: 2, thursday: 3,
+  friday: 4, saturday: 5, sunday: 6,
+}
 
 const props = withDefaults(
   defineProps<{
@@ -27,9 +31,44 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: DayName[]): void }>()
 
-const selectedInOrder = computed(() =>
-  DAYS.filter((d) => props.modelValue.includes(d.id)),
-)
+/**
+ * Collapse a list of day names into the most readable form:
+ *   - 7 days → "Every day"
+ *   - consecutive run → "Mon–Fri"
+ *   - mixed → "Mon–Tue, Thu, Sat"
+ */
+const summary = computed(() => {
+  if (!props.modelValue?.length) return '—'
+
+  const seen = new Set<number>()
+  for (const d of props.modelValue) {
+    const i = DAY_INDEX[d]
+    if (i !== undefined) seen.add(i)
+  }
+  if (seen.size === 0) return '—'
+  if (seen.size === 7) return 'Every day'
+
+  const indices = [...seen].sort((a, b) => a - b)
+  const groups: number[][] = []
+  let current: number[] = [indices[0]]
+  for (let i = 1; i < indices.length; i++) {
+    if (indices[i] === indices[i - 1] + 1) {
+      current.push(indices[i])
+    } else {
+      groups.push(current)
+      current = [indices[i]]
+    }
+  }
+  groups.push(current)
+
+  return groups
+    .map((g) =>
+      g.length === 1
+        ? DAYS[g[0]].short
+        : `${DAYS[g[0]].short}–${DAYS[g[g.length - 1]].short}`,
+    )
+    .join(', ')
+})
 
 function toggle(day: DayName): void {
   if (props.modelValue.includes(day)) {
@@ -41,33 +80,29 @@ function toggle(day: DayName): void {
 </script>
 
 <template>
-  <div class="chips" :class="{ 'chips--readonly': !interactive }">
-    <template v-if="interactive">
-      <button
-        v-for="d in DAYS"
-        :key="d.id"
-        type="button"
-        class="chip"
-        :class="{ 'chip--on': modelValue.includes(d.id) }"
-        @click="toggle(d.id)"
-      >
-        {{ d.short }}
-      </button>
-    </template>
-    <template v-else>
-      <span v-if="!selectedInOrder.length" class="chips__empty">—</span>
-      <span
-        v-for="d in selectedInOrder"
-        :key="d.id"
-        class="chip chip--on chip--readonly"
-      >
-        {{ d.short }}
-      </span>
-    </template>
+  <div v-if="interactive" class="chips">
+    <button
+      v-for="d in DAYS"
+      :key="d.id"
+      type="button"
+      class="chip"
+      :class="{ 'chip--on': modelValue.includes(d.id) }"
+      @click="toggle(d.id)"
+    >
+      {{ d.short }}
+    </button>
   </div>
+  <span
+    v-else
+    class="day-summary"
+    :class="{ 'day-summary--empty': summary === '—' }"
+  >
+    {{ summary }}
+  </span>
 </template>
 
 <style scoped>
+/* Interactive editor — full strip of 7 toggleable chips */
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -85,22 +120,33 @@ function toggle(day: DayName): void {
   border: 1px solid transparent;
   transition: background-color 0.12s, color 0.12s, border-color 0.12s;
 }
-
-button.chip:hover { background: var(--grayscale-10); }
-
+.chip:hover { background: var(--grayscale-10); }
 .chip--on {
   background: var(--primary-accent-100);
   color: var(--white);
 }
-button.chip--on:hover { background: var(--primary-accent-80); }
+.chip--on:hover { background: var(--primary-accent-80); }
 
-.chip--readonly {
-  height: 22px;
-  padding: 0 8px;
-  font-size: 11px;
+/* Read-only summary — single compact pill with collapsed range */
+.day-summary {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  background: var(--primary-accent-04-transparent);
+  color: var(--primary-accent-100);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
   letter-spacing: 0.3px;
-  cursor: default;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-
-.chips__empty { color: var(--grayscale-40); font-size: 13px; }
+.day-summary--empty {
+  background: transparent;
+  color: var(--grayscale-40);
+  font-style: italic;
+  font-weight: var(--font-weight-normal);
+  padding: 0;
+}
 </style>

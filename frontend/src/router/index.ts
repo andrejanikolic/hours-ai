@@ -1,11 +1,10 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/hoursai' },
   {
-    path: '/hoursai',
-    name: 'hoursai',
-    component: () => import('../pages/HoursAIPage.vue'),
+    path: '/',
+    name: 'welcome',
+    component: () => import('../pages/WelcomePage.vue'),
     meta: { title: 'HoursAI' },
   },
   {
@@ -13,12 +12,6 @@ const routes: RouteRecordRaw[] = [
     name: 'test',
     component: () => import('../components/HoursAITestPage.vue'),
     meta: { title: 'HoursAI Test' },
-  },
-  {
-    path: '/brands',
-    name: 'brands',
-    component: () => import('../pages/BrandsListPage.vue'),
-    meta: { title: 'Brands' },
   },
   {
     path: '/brands/:brandId',
