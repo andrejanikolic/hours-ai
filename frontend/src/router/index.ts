@@ -1,7 +1,13 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/brands' },
+  { path: '/', redirect: '/test' },
+  {
+    path: '/test',
+    name: 'test',
+    component: () => import('../components/DeepSeekTestPage.vue'),
+    meta: { title: 'DeepSeek Test' },
+  },
   {
     path: '/brands',
     name: 'brands',

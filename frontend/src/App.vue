@@ -30,6 +30,7 @@ const crumbs = computed<Crumb[]>(() => {
 })
 
 const brandsActive = computed(() => route.path.startsWith('/brands'))
+const testActive = computed(() => route.path.startsWith('/test'))
 </script>
 
 <template>
@@ -55,8 +56,22 @@ const brandsActive = computed(() => route.path.startsWith('/brands'))
     </header>
 
     <aside class="sidebar" aria-label="Primary">
-      <div class="sidebar__section-label">Configuration</div>
+      <div class="sidebar__section-label">Hours AI</div>
       <nav class="sidebar__nav">
+        <RouterLink
+          to="/test"
+          class="sidebar__item"
+          :class="{ 'sidebar__item--active': testActive }"
+        >
+          <span class="sidebar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v4l3 3"/>
+            </svg>
+          </span>
+          <span class="sidebar__label">Store Hours</span>
+        </RouterLink>
         <RouterLink
           to="/brands"
           class="sidebar__item"
