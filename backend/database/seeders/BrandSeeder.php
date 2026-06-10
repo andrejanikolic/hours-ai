@@ -12,8 +12,9 @@ class BrandSeeder extends Seeder
     public function run(): void
     {
         $brands = [
-            ['name' => 'Demo Burger',  'slug' => 'demo-burger',  'timezone' => 'America/New_York', 'active' => true],
-            ['name' => 'Pasta House',  'slug' => 'pasta-house',  'timezone' => 'Europe/Belgrade',  'active' => true],
+            ['name' => 'Demo Burger',  'slug' => 'demo-burger',  'timezone' => 'America/New_York',    'active' => true],
+            ['name' => 'Pasta House',  'slug' => 'pasta-house',  'timezone' => 'Europe/Belgrade',     'active' => true],
+            ['name' => 'Starbird',     'slug' => 'starbird',     'timezone' => 'America/Los_Angeles', 'active' => true],
         ];
 
         foreach ($brands as $brand) {

@@ -36,6 +36,44 @@ class ServingTimeSeeder extends Seeder
         $this->insert('menu', $breakfastId, 'weekday', $weekdays, null, null, '07:00', '11:00', true);
         $this->insert('menu', $breakfastId, 'weekday', $weekend, null, null, '08:00', '13:00', true);
 
+        // ── Starbird ──────────────────────────────────────────────────────
+        // Cupertino: Mon–Sat 10:30–22:00, Sun 10:30–21:00
+        $cupertino = DB::table('venues')->where('slug', 'cupertino')->value('id');
+        $this->insert('venue', $cupertino, 'weekday', ['monday','tuesday','wednesday','thursday','friday','saturday'], null, null, '10:30', '22:00', true);
+        $this->insert('venue', $cupertino, 'weekday', ['sunday'], null, null, '10:30', '21:00', true);
+
+        // South San Francisco: Mon–Sat 10:30–22:00, Sun 10:30–21:00
+        $southSF = DB::table('venues')->where('slug', 'south-san-francisco')->value('id');
+        $this->insert('venue', $southSF, 'weekday', ['monday','tuesday','wednesday','thursday','friday','saturday'], null, null, '10:30', '22:00', true);
+        $this->insert('venue', $southSF, 'weekday', ['sunday'], null, null, '10:30', '21:00', true);
+
+        // Palo Alto: Mon–Sat 10:30–22:00, Sun 10:30–21:00
+        $paloAlto = DB::table('venues')->where('slug', 'palo-alto')->value('id');
+        $this->insert('venue', $paloAlto, 'weekday', ['monday','tuesday','wednesday','thursday','friday','saturday'], null, null, '10:30', '22:00', true);
+        $this->insert('venue', $paloAlto, 'weekday', ['sunday'], null, null, '10:30', '21:00', true);
+
+        // Pleasanton: Sun–Tue 10:30–22:00, Wed–Sat 10:30–23:00
+        $pleasanton = DB::table('venues')->where('slug', 'pleasanton')->value('id');
+        $this->insert('venue', $pleasanton, 'weekday', ['sunday','monday','tuesday'], null, null, '10:30', '22:00', true);
+        $this->insert('venue', $pleasanton, 'weekday', ['wednesday','thursday','friday','saturday'], null, null, '10:30', '23:00', true);
+
+        // San Francisco SOMA: Mon–Thu 10:30–22:00, Fri–Sat 10:30–22:30, Sun 10:30–21:00
+        $soma = DB::table('venues')->where('slug', 'san-francisco-soma')->value('id');
+        $this->insert('venue', $soma, 'weekday', ['monday','tuesday','wednesday','thursday'], null, null, '10:30', '22:00', true);
+        $this->insert('venue', $soma, 'weekday', ['friday','saturday'], null, null, '10:30', '22:30', true);
+        $this->insert('venue', $soma, 'weekday', ['sunday'], null, null, '10:30', '21:00', true);
+
+        // SFO Airport Terminal 1B: Daily 05:00–23:00
+        $sfo = DB::table('venues')->where('slug', 'sfo-airport-t1b')->value('id');
+        $this->insert('venue', $sfo, 'weekday', $allDays, null, null, '05:00', '23:00', true);
+
+        // Cal Memorial Stadium & Levi's Stadium: event-specific, no fixed hours (no serving times inserted)
+
+        // San Jose: Mon–Sat 10:30–22:00, Sun 10:30–21:00
+        $sanJose = DB::table('venues')->where('slug', 'san-jose')->value('id');
+        $this->insert('venue', $sanJose, 'weekday', ['monday','tuesday','wednesday','thursday','friday','saturday'], null, null, '10:30', '22:00', true);
+        $this->insert('venue', $sanJose, 'weekday', ['sunday'], null, null, '10:30', '21:00', true);
+
         // Order type: Delivery for Downtown — limited hours
         $deliveryVot = DB::table('venue_order_types')
             ->where('venue_id', $downtownId)
