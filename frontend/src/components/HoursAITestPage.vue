@@ -40,6 +40,7 @@ const brandFilter = ref<string>('all')
 const selected = ref<Set<string>>(new Set())
 const prompt = ref('')
 const previews = ref<PreviewResult[]>([])
+const discarded = ref<Set<string>>(new Set())
 const parsing = ref(false)
 const applying = ref(false)
 const applySuccess = ref(false)
@@ -104,6 +105,7 @@ function toggle(r: Row) {
 function clearSelection() {
   selected.value.clear()
   previews.value = []
+  discarded.value.clear()
 }
 
 function weekdaySummary(times: ServingTime[]): string {
@@ -156,6 +158,7 @@ async function parse() {
   parsing.value = true
   applySuccess.value = false
   previews.value = []
+  discarded.value.clear()
 
   const parseTargets = targets.value
 
@@ -195,7 +198,7 @@ async function parse() {
 }
 
 async function applyAll() {
-  const toApply = previews.value.filter(p => !p.clarification_needed && !p.error && p.serving_times.length)
+  const toApply = previews.value.filter(p => !p.clarification_needed && !p.error && p.serving_times.length && !discarded.value.has(rowKey(p.row)))
   if (!toApply.length) return
 
   applying.value = true
@@ -405,12 +408,19 @@ onMounted(fetchAll)
           @click="applyAll"
         >
           <span v-if="applying" class="spinner" />
-          {{ applying ? 'Saving…' : `Apply to ${previews.filter(p => !p.clarification_needed && !p.error).length} entities` }}
+          {{ applying ? 'Saving…' : `Apply to ${previews.filter(p => !p.clarification_needed && !p.error && !discarded.has(rowKey(p.row))).length} entities` }}
         </button>
       </div>
 
       <div v-for="p in previews" :key="rowKey(p.row)" class="preview-card card">
         <div class="preview-card__header">
+          <input
+            v-if="!p.error && !p.clarification_needed"
+            type="checkbox"
+            class="preview-card__check"
+            :checked="!discarded.has(rowKey(p.row))"
+            @change="discarded.has(rowKey(p.row)) ? discarded.delete(rowKey(p.row)) : discarded.add(rowKey(p.row))"
+          />
           <span :class="['badge', `badge--${p.row.entityType}`]">
             {{ p.row.entityType === 'order_type' ? 'order' : p.row.entityType }}
           </span>
@@ -418,6 +428,7 @@ onMounted(fetchAll)
           <span v-if="p.row.parentName" class="preview-card__parent">under {{ p.row.parentName }}</span>
           <span v-if="p.error" class="preview-card__status preview-card__status--error">Error</span>
           <span v-else-if="p.clarification_needed" class="preview-card__status preview-card__status--warn">Needs clarification</span>
+          <span v-else-if="discarded.has(rowKey(p.row))" class="preview-card__status preview-card__status--discarded">Skipped</span>
           <span v-else class="preview-card__status preview-card__status--ok">Ready to apply</span>
         </div>
 
@@ -797,8 +808,10 @@ th { padding: 0.65rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 6
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
 }
-.preview-card__status--ok    { background: #ecfdf5; color: #065f46; }
-.preview-card__status--warn  { background: #fffbeb; color: #92400e; }
+.preview-card__status--ok        { background: #ecfdf5; color: #065f46; }
+.preview-card__status--warn      { background: #fffbeb; color: #92400e; }
+.preview-card__status--discarded { background: #f1f5f9; color: #94a3b8; }
+.preview-card__check { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
 .preview-card__status--error { background: #fef2f2; color: #991b1b; }
 
 .preview-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
