@@ -12,63 +12,56 @@ class DeepSeekServingTimesParser
     private const VALID_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
     private const SCHEMA = <<<'JSON'
-    [
-      {
-        "type": "weekday",
-        "days": ["monday", "tuesday"],
-        "time_from": "09:00",
-        "time_to": "22:00",
-        "working": true
-      },
-      {
-        "type": "special",
-        "date": "2026-12-25",
-        "date_to": null,
-        "time_from": null,
-        "time_to": null,
-        "working": false
-      }
-    ]
+    {
+      "clarification_needed": false,
+      "clarification_message": null,
+      "serving_times": [
+        {
+          "type": "weekday",
+          "days": ["monday", "tuesday"],
+          "time_from": "09:00",
+          "time_to": "22:00",
+          "working": true
+        },
+        {
+          "type": "special",
+          "date": "2026-12-25",
+          "date_to": null,
+          "time_from": null,
+          "time_to": null,
+          "working": false
+        }
+      ]
+    }
     JSON;
 
-    public function parse(string $prompt, array $currentServingTimes): array
+    private const MAX_RETRIES = 4;
+
+    public function parse(string $prompt, array $currentServingTimes, string $entityName = ''): array
     {
         $currentText = $this->formatCurrentTimes($currentServingTimes);
+        $entityHint  = $entityName !== '' ? "You are configuring hours for: {$entityName}.\n\n" : '';
 
         $systemPrompt = <<<PROMPT
         You are a serving-times configuration assistant for a restaurant management system.
-
+        {$entityHint}
         CURRENT SERVING TIMES:
         {$currentText}
 
-        TASK: Parse the user's plain-English instruction into a JSON array of serving time objects.
+        TASK: Parse the user's plain-English instruction into a JSON object.
         Rules:
         - Keep unchanged serving times from the CURRENT SERVING TIMES unless the instruction changes them.
         - Use "weekday" type for recurring days-of-week schedules; use "special" type for specific date overrides.
-        - Times must be in HH:MM 24-hour format or null.
+        - Times must be in HH:MM 24-hour format (convert 12-hour am/pm to 24-hour) or null.
         - For weekday entries, "days" must be an array of day names (lowercase).
         - For special entries, "date" is required (YYYY-MM-DD); "date_to" is optional for date ranges.
         - Set "working": false for closed periods.
-        - Return ONLY a valid JSON array matching this schema — no markdown, no explanation:
+        - If the instruction is ambiguous or cannot be parsed, set clarification_needed to true and explain in clarification_message.
+        - Return ONLY a valid JSON object matching this schema — no markdown, no explanation:
 
         PROMPT . self::SCHEMA;
 
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . config('services.deepseek.api_key'),
-            'Content-Type'  => 'application/json',
-        ])->timeout(30)->post(config('services.deepseek.api_url') . '/chat/completions', [
-            'model'       => 'deepseek-chat',
-            'temperature' => 0,
-            'messages'    => [
-                ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user',   'content' => $prompt],
-            ],
-        ]);
-
-        if ($response->failed()) {
-            Log::error('DeepSeek API error', ['status' => $response->status(), 'body' => $response->body()]);
-            throw new \RuntimeException('DeepSeek API request failed: ' . $response->status());
-        }
+        $response = $this->callWithRetry($systemPrompt, $prompt);
 
         $content = $response->json('choices.0.message.content');
         $content = $this->stripMarkdown($content);
@@ -80,10 +73,48 @@ class DeepSeekServingTimesParser
             throw new \RuntimeException('DeepSeek returned invalid JSON');
         }
 
+        $clarificationNeeded = (bool) ($parsed['clarification_needed'] ?? false);
+
         return [
-            'serving_times'        => $this->sanitizeRows($parsed),
-            'clarification_needed' => false,
+            'serving_times'         => $this->sanitizeRows($parsed['serving_times'] ?? []),
+            'clarification_needed'  => $clarificationNeeded,
+            'clarification_message' => $parsed['clarification_message'] ?? null,
         ];
+    }
+
+    private function callWithRetry(string $systemPrompt, string $userPrompt): \Illuminate\Http\Client\Response
+    {
+        $attempt = 0;
+        $delay   = 2;
+
+        while (true) {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . config('services.deepseek.api_key'),
+                'Content-Type'  => 'application/json',
+            ])->timeout(30)->post(config('services.deepseek.api_url') . '/chat/completions', [
+                'model'       => 'deepseek-chat',
+                'temperature' => 0,
+                'messages'    => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user',   'content' => $userPrompt],
+                ],
+            ]);
+
+            if ($response->status() === 429 && $attempt < self::MAX_RETRIES) {
+                Log::warning('DeepSeek 429, retrying', ['attempt' => $attempt + 1, 'delay' => $delay]);
+                sleep($delay);
+                $delay  *= 2;
+                $attempt++;
+                continue;
+            }
+
+            if ($response->failed()) {
+                Log::error('DeepSeek API error', ['status' => $response->status(), 'body' => $response->body()]);
+                throw new \RuntimeException('DeepSeek API request failed: ' . $response->status());
+            }
+
+            return $response;
+        }
     }
 
     private function formatCurrentTimes(array $times): string

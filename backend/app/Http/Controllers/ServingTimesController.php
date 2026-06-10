@@ -43,6 +43,20 @@ class ServingTimesController extends Controller
             'working'     => 'boolean',
         ]);
 
+        if (($data['type'] ?? '') === 'weekday') {
+            $existing = ServingTime::where('parent_type', $data['parent_type'])
+                ->where('parent_id', $data['parent_id'])
+                ->where('type', 'weekday')
+                ->get()
+                ->map(fn($st) => $st->toArray())
+                ->toArray();
+
+            $conflict = $this->findWeekdayOverlap([$data], $existing);
+            if ($conflict) {
+                return response()->json(['message' => $conflict], 422);
+            }
+        }
+
         $st = ServingTime::create($data);
 
         return response()->json($st, 201);
@@ -78,19 +92,26 @@ class ServingTimesController extends Controller
         $data = $request->validate([
             'parent_type' => 'required|in:brand,venue,menu,order_type',
             'parent_id'   => 'required|integer',
-            'prompt'      => 'required|string|max:1000',
+            'prompt'      => 'required|string|max:5000',
+            'entity_name' => 'nullable|string|max:255',
         ]);
 
         $current = ServingTime::where('parent_type', $data['parent_type'])
             ->where('parent_id', $data['parent_id'])
             ->get()
+            ->map(fn($st) => $st->toArray())
             ->toArray();
 
-        $preview = $this->parser->parse($data['prompt'], $current);
+        $preview = $this->parser->parse(
+            $data['prompt'],
+            $current,
+            $data['entity_name'] ?? ''
+        );
 
         return response()->json([
-            'preview'              => $preview,
-            'clarification_needed' => $preview['clarification_needed'] ?? false,
+            'preview'               => $preview['serving_times'],
+            'clarification_needed'  => $preview['clarification_needed'],
+            'clarification_message' => $preview['clarification_message'] ?? null,
         ]);
     }
 
@@ -109,6 +130,12 @@ class ServingTimesController extends Controller
             'serving_times.*.time_to'   => 'nullable|date_format:H:i',
             'serving_times.*.working'   => 'boolean',
         ]);
+
+        $weekdays = array_values(array_filter($data['serving_times'], fn($st) => ($st['type'] ?? '') === 'weekday'));
+        $conflict = $this->findWeekdayOverlap($weekdays, []);
+        if ($conflict) {
+            return response()->json(['message' => $conflict], 422);
+        }
 
         $rows = array_map(fn($st) => array_merge($st, [
             'parent_type' => $data['parent_type'],
@@ -131,5 +158,36 @@ class ServingTimesController extends Controller
             ->get();
 
         return response()->json($result);
+    }
+
+    /**
+     * Check for overlapping weekday entries.
+     * $newEntries are checked against each other AND against $existing.
+     * Returns an error message string, or null when no overlap found.
+     */
+    private function findWeekdayOverlap(array $newEntries, array $existing): ?string
+    {
+        $all = array_merge($newEntries, $existing);
+
+        for ($i = 0; $i < count($all); $i++) {
+            for ($j = $i + 1; $j < count($all); $j++) {
+                $a = $all[$i];
+                $b = $all[$j];
+
+                $aDays = is_array($a['days'] ?? null) ? $a['days'] : (is_string($a['days'] ?? null) ? json_decode($a['days'], true) : []);
+                $bDays = is_array($b['days'] ?? null) ? $b['days'] : (is_string($b['days'] ?? null) ? json_decode($b['days'], true) : []);
+
+                $sharedDays = array_intersect($aDays ?? [], $bDays ?? []);
+
+                if (empty($sharedDays)) {
+                    continue;
+                }
+
+                $shared = implode(', ', array_values($sharedDays));
+                return "Overlapping weekday entries for: {$shared}. Each day can only appear in one weekday schedule.";
+            }
+        }
+
+        return null;
     }
 }
