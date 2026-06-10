@@ -12,10 +12,11 @@ class OrderTypeSeeder extends Seeder
     public function run(): void
     {
         $orderTypes = [
-            ['id' => 1, 'name' => 'Pickup',     'slug' => 'pickup'],
-            ['id' => 2, 'name' => 'Delivery',   'slug' => 'delivery'],
-            ['id' => 3, 'name' => 'Dine In',    'slug' => 'dine-in'],
-            ['id' => 4, 'name' => 'Drive Thru', 'slug' => 'drive-thru'],
+            ['id' => 1, 'name' => 'Pickup',            'slug' => 'pickup'],
+            ['id' => 2, 'name' => 'Delivery',          'slug' => 'delivery'],
+            ['id' => 3, 'name' => 'Dine In',           'slug' => 'dine-in'],
+            ['id' => 4, 'name' => 'Drive Thru',        'slug' => 'drive-thru'],
+            ['id' => 5, 'name' => 'Catering Delivery', 'slug' => 'catering-delivery'],
         ];
 
         DB::table('order_types')->insert($orderTypes);

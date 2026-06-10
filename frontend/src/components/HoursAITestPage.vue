@@ -149,6 +149,11 @@ async function fetchAll() {
     }
   }
 
+  const orderTypes = await fetch(`${API}/order-types`).then(r => r.json())
+  for (const ot of orderTypes) {
+    result.push({ entityType: 'order_type', entityId: ot.id, name: ot.name, parentName: '', servingTimes: ot.serving_times ?? [] })
+  }
+
   rows.value = result
   loading.value = false
 }

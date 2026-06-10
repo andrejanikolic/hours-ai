@@ -15,7 +15,17 @@ class OrderTypeController extends Controller
 {
     public function index(): JsonResponse
     {
-        return response()->json(OrderType::all());
+        $orderTypes = OrderType::all()->map(function ($ot) {
+            return array_merge($ot->toArray(), [
+                'serving_times' => \App\Models\ServingTime::where('parent_type', 'order_type')
+                    ->where('parent_id', $ot->id)
+                    ->get()
+                    ->map(fn($st) => $st->toArray())
+                    ->toArray(),
+            ]);
+        });
+
+        return response()->json($orderTypes);
     }
 
     public function venueOrderTypes(Brand $brand, Venue $venue): JsonResponse
