@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="HoursAI">
+  <!-- PAR navy app tile -->
+  <rect width="32" height="32" rx="7" fill="#0A3450"/>
+  <!-- Clock face -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="14" cy="18" r="8"/>
+    <!-- minute hand (up) + hour hand (to ~2 o'clock) -->
+    <path d="M14 18 V12"/>
+    <path d="M14 18 L18.2 18"/>
+  </g>
+  <circle cx="14" cy="18" r="1.4" fill="#FFFFFF"/>
+  <!-- AI sparkle -->
+  <path d="M24 4 L25.2 7 L28 8 L25.2 9 L24 12 L22.8 9 L20 8 L22.8 7 Z" fill="#FFFFFF"/>
+</svg>
