@@ -21,6 +21,7 @@ interface Row {
   entityId: number
   name: string
   parentName: string
+  venueName?: string
   servingTimes: ServingTime[]
 }
 
@@ -164,6 +165,7 @@ async function fetchAll() {
   loading.value = true
   const result: Row[] = []
 
+  const deliverySlugs = ['delivery', 'catering-delivery']
   const brands = await fetch(`${API}/brands`).then(r => r.json())
 
   for (const brand of brands) {
@@ -180,12 +182,20 @@ async function fetchAll() {
     for (const menu of menus) {
       result.push({ entityType: 'menu', entityId: menu.id, name: menu.name, parentName: brand.name, servingTimes: menu.serving_times ?? [] })
     }
-  }
 
-  const deliveryOrderTypes = ['delivery', 'catering-delivery']
-  const orderTypes = await fetch(`${API}/order-types`).then(r => r.json())
-  for (const ot of orderTypes.filter((o: any) => deliveryOrderTypes.includes(o.slug))) {
-    result.push({ entityType: 'order_type', entityId: ot.id, name: ot.name, parentName: '', servingTimes: ot.serving_times ?? [] })
+    for (const venue of venues) {
+      const orderTypes = await fetch(`${API}/brands/${brand.id}/venues/${venue.id}/order-types`).then(r => r.json())
+      for (const ot of orderTypes.filter((o: any) => deliverySlugs.includes(o.slug))) {
+        result.push({
+          entityType: 'order_type',
+          entityId: ot.venue_order_type_id,
+          name: ot.name,
+          parentName: brand.name,
+          venueName: venue.name,
+          servingTimes: ot.serving_times ?? [],
+        })
+      }
+    }
   }
 
   rows.value = result
@@ -206,7 +216,7 @@ async function parse() {
       const res = await fetch(`${API}/serving-times/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parent_type: row.entityType, parent_id: row.entityId, prompt: prompt.value, entity_name: row.name }),
+        body: JSON.stringify({ parent_type: row.entityType, parent_id: row.entityId, prompt: prompt.value, entity_name: row.venueName ? `${row.name} at ${row.venueName}` : row.name }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.message ?? 'Parse failed')
@@ -338,7 +348,8 @@ onMounted(fetchAll)
             </th>
             <th>Type</th>
             <th>Name</th>
-            <th>Parent</th>
+            <th>Brand</th>
+            <th v-if="filter === 'order_type' || filter === 'all'">Venue</th>
             <th>Current hours</th>
           </tr>
         </thead>
@@ -362,6 +373,7 @@ onMounted(fetchAll)
             </td>
             <td class="col-name">{{ row.name }}</td>
             <td class="col-parent">{{ row.parentName || '—' }}</td>
+            <td v-if="filter === 'order_type' || filter === 'all'" class="col-parent">{{ row.venueName || '—' }}</td>
             <td class="col-hours">
               <span v-if="weekdaySummary(row.servingTimes)">{{ weekdaySummary(row.servingTimes) }}</span>
               <span v-else-if="!specialDates(row.servingTimes).length" class="no-hours">No hours set</span>
@@ -466,7 +478,8 @@ onMounted(fetchAll)
             {{ p.row.entityType === 'order_type' ? 'order' : p.row.entityType }}
           </span>
           <strong class="preview-card__name">{{ p.row.name }}</strong>
-          <span v-if="p.row.parentName" class="preview-card__parent">under {{ p.row.parentName }}</span>
+          <span v-if="p.row.venueName" class="preview-card__parent">@ {{ p.row.venueName }}</span>
+          <span v-else-if="p.row.parentName" class="preview-card__parent">under {{ p.row.parentName }}</span>
           <span v-if="p.error" class="preview-card__status preview-card__status--error">Error</span>
           <span v-else-if="p.clarification_needed" class="preview-card__status preview-card__status--warn">Needs clarification</span>
           <span v-else-if="discarded.has(rowKey(p.row))" class="preview-card__status preview-card__status--discarded">Skipped</span>
