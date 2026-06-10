@@ -121,7 +121,7 @@ class ServingTimesController extends Controller
         $data = $request->validate([
             'parent_type'   => 'required|in:brand,venue,menu,order_type',
             'parent_id'     => 'required|integer',
-            'serving_times' => 'required|array',
+            'serving_times' => 'present|array',
             'serving_times.*.type'      => 'required|in:weekday,special',
             'serving_times.*.days'      => 'nullable|array',
             'serving_times.*.days.*'    => 'in:monday,tuesday,wednesday,thursday,friday,saturday,sunday',
