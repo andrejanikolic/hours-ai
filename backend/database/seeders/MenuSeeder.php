@@ -11,60 +11,77 @@ class MenuSeeder extends Seeder
 {
     public function run(): void
     {
-        $demoBurgerDowntownId = DB::table('venues')->where('slug', 'downtown')->value('id');
-        $pastaHouseKnezId     = DB::table('venues')->where('slug', 'knez-mihailova')->value('id');
+        DB::table('menus')->truncate();
 
-        $menus = [
-            // Demo Burger — Downtown venue menus
-            [
-                'venue_id'      => $demoBurgerDowntownId,
-                'name'          => 'Breakfast',
-                'internal_name' => 'BK Morning Menu',
-                'description'   => 'Morning items served before 11am.',
-                'active'        => true,
-                'position'      => 1,
-            ],
-            [
-                'venue_id'      => $demoBurgerDowntownId,
-                'name'          => 'All Day',
-                'internal_name' => 'BK Main Menu',
-                'description'   => 'Full menu available all day.',
-                'active'        => true,
-                'position'      => 2,
-            ],
-            [
-                'venue_id'      => $demoBurgerDowntownId,
-                'name'          => 'Late Night',
-                'internal_name' => 'BK Late',
-                'description'   => 'Reduced menu after 10pm.',
-                'active'        => true,
-                'position'      => 3,
-            ],
-            // Pasta House — Knez Mihailova venue menus
-            [
-                'venue_id'      => $pastaHouseKnezId,
-                'name'          => 'Lunch',
-                'internal_name' => 'PH Lunch',
-                'description'   => 'Lunch specials 12pm–3pm.',
-                'active'        => true,
-                'position'      => 1,
-            ],
-            [
-                'venue_id'      => $pastaHouseKnezId,
-                'name'          => 'Dinner',
-                'internal_name' => 'PH Dinner',
-                'description'   => 'Full dinner menu.',
-                'active'        => true,
-                'position'      => 2,
-            ],
-        ];
+        $now = now();
 
-        foreach ($menus as $menu) {
-            DB::table('menus')->insert([
-                ...$menu,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+        // ── helpers ────────────────────────────────────────────────────────
+        $venue = fn(string $slug): ?int => DB::table('venues')->where('slug', $slug)->value('id');
+
+        $rows = [];
+        $pos  = 1;
+        $add  = function (int $venueId, string $name, ?string $internalName, ?string $description, int $position) use (&$rows, $now): void {
+            $rows[] = [
+                'venue_id'      => $venueId,
+                'name'          => $name,
+                'internal_name' => $internalName,
+                'description'   => $description,
+                'active'        => true,
+                'position'      => $position,
+                'created_at'    => $now,
+                'updated_at'    => $now,
+            ];
+        };
+
+        // ── Demo Burger ───────────────────────────────────────────────────
+        foreach (['downtown', 'airport-t2'] as $slug) {
+            $id = $venue($slug);
+            if (!$id) continue;
+            $suffix = $slug === 'downtown' ? '' : ' T2';
+            $add($id, 'Breakfast',  'BK Morning Menu' . $suffix, 'Morning items served before 11am.', 1);
+            $add($id, 'All Day',    'BK Main Menu' . $suffix,    'Full menu available all day.',      2);
+            if ($slug === 'downtown') {
+                $add($id, 'Late Night', 'BK Late', 'Reduced menu after 10pm.', 3);
+            }
         }
+
+        // ── Pasta House ───────────────────────────────────────────────────
+        foreach (['knez-mihailova', 'novi-sad'] as $slug) {
+            $id = $venue($slug);
+            if (!$id) continue;
+            $suffix = $slug === 'knez-mihailova' ? '' : ' NS';
+            $add($id, 'Lunch',  'PH Lunch' . $suffix,  'Lunch specials 12pm–3pm.', 1);
+            $add($id, 'Dinner', 'PH Dinner' . $suffix, 'Full dinner menu.',         2);
+        }
+
+        // ── Starbird — standard venues ────────────────────────────────────
+        $standardStarbird = [
+            'cupertino', 'south-san-francisco', 'palo-alto', 'pleasanton',
+            'san-francisco-soma', 'san-jose', 'sunnyvale', 'foster-city',
+            'campbell', 'walnut-creek', 'corte-madera',
+            'marina-del-rey', 'torrance', 'beverly-grove',
+            'denver', 'castle-rock',
+        ];
+        foreach ($standardStarbird as $slug) {
+            $id = $venue($slug);
+            if (!$id) continue;
+            $add($id, 'Lunch',  'SB Lunch',  'Available from opening until 3pm.',       1);
+            $add($id, 'Dinner', 'SB Dinner', 'Available from 3pm until closing.',        2);
+        }
+
+        // SFO Airport — single all-day menu (5am–11pm)
+        $sfoId = $venue('sfo-airport-t1b');
+        if ($sfoId) {
+            $add($sfoId, 'All Day', 'SB SFO All Day', 'Full menu available from 5am to 11pm.', 1);
+        }
+
+        // Stadium venues — event-driven menu
+        foreach (['cal-memorial-stadium', 'levis-stadium'] as $slug) {
+            $id = $venue($slug);
+            if (!$id) continue;
+            $add($id, 'Event Menu', 'SB Event', 'Available during scheduled events only.', 1);
+        }
+
+        DB::table('menus')->insert($rows);
     }
 }
