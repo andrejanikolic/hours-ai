@@ -11,7 +11,6 @@ import type { ParseResult, ServingTime, Venue } from '../../types'
 import AppButton from '../shared/AppButton.vue'
 import AppTextarea from '../shared/AppTextarea.vue'
 import ListSkeleton from '../shared/ListSkeleton.vue'
-import StatusDot from '../shared/StatusDot.vue'
 import DayChips from '../serving-times/DayChips.vue'
 import ServingTimesDiff from '../serving-times/ServingTimesDiff.vue'
 

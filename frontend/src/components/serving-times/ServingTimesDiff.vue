@@ -80,7 +80,7 @@ const summary = computed(() => {
   return `HoursAI will ${parts.join(', ')}.`
 })
 
-function timeLabel(s: { working: boolean; time_from: string | null | undefined; time_to: string | null | undefined }): string {
+function timeLabel(s: { working: boolean; time_from?: string | null; time_to?: string | null }): string {
   if (!s.working) return 'Closed all day'
   if (!s.time_from || !s.time_to) return '—'
   return `${s.time_from} – ${s.time_to}`
