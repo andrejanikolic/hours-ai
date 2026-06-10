@@ -13,6 +13,7 @@ import AppButton from '../shared/AppButton.vue'
 import AppTextarea from '../shared/AppTextarea.vue'
 import ListSkeleton from '../shared/ListSkeleton.vue'
 import VoiceButton from '../shared/VoiceButton.vue'
+import VenueFilter from '../shared/VenueFilter.vue'
 import DayChips from '../serving-times/DayChips.vue'
 import ServingTimesDiff from '../serving-times/ServingTimesDiff.vue'
 
@@ -46,6 +47,8 @@ const loading = ref(true)
 const loadError = ref<string | null>(null)
 
 const orderTypeFilter = ref<string | 'all'>('all')
+/** Selected venue ids for filtering. Empty = all venues. */
+const venueFilter = ref<number[]>([])
 const selectedKeys = ref<Set<string>>(new Set())
 const prompt = ref('')
 
@@ -156,11 +159,25 @@ const channelOptions = computed(() =>
   }).filter((o): o is { slug: string; name: string; count: number } => o !== null),
 )
 
-const filteredRows = computed(() =>
-  orderTypeFilter.value === 'all'
-    ? rows.value
-    : rows.value.filter((r) => r.orderTypeSlug === orderTypeFilter.value),
-)
+/** Venue filter options — each venue with its channel count, in first-seen order. */
+const venueOptions = computed(() => {
+  const seen = new Map<number, { id: number; name: string; count: number }>()
+  for (const r of rows.value) {
+    const existing = seen.get(r.venueId)
+    if (existing) existing.count++
+    else seen.set(r.venueId, { id: r.venueId, name: r.venueName, count: 1 })
+  }
+  return [...seen.values()]
+})
+
+const filteredRows = computed(() => {
+  const venueSet = new Set(venueFilter.value)
+  return rows.value.filter(
+    (r) =>
+      (orderTypeFilter.value === 'all' || r.orderTypeSlug === orderTypeFilter.value) &&
+      (venueSet.size === 0 || venueSet.has(r.venueId)),
+  )
+})
 
 const visibleSelectedCount = computed(
   () => filteredRows.value.filter((r) => selectedKeys.value.has(r.rowKey)).length,
@@ -408,6 +425,9 @@ function rowLabel(p: RowPreview): string {
     </div>
 
     <template v-else>
+      <!-- Venue filter (searchable, multi-select) -->
+      <VenueFilter :venues="venueOptions" v-model="venueFilter" />
+
       <!-- Channel filter pills -->
       <div class="channel-filter" role="tablist" aria-label="Filter by channel">
         <button
