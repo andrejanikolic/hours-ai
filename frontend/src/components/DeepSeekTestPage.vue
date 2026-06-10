@@ -164,7 +164,7 @@ async function parse() {
       if (!res.ok) throw new Error(data.message ?? 'Parse failed')
       return {
         row,
-        serving_times: data.preview?.serving_times ?? [],
+        serving_times: Array.isArray(data.preview) ? data.preview : (data.preview?.serving_times ?? []),
         clarification_needed: data.clarification_needed ?? false,
         clarification_message: data.clarification_message ?? null,
         error: undefined,
