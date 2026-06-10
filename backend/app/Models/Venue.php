@@ -23,6 +23,11 @@ class Venue extends Model
         return $this->belongsTo(Brand::class);
     }
 
+    public function menus(): HasMany
+    {
+        return $this->hasMany(Menu::class);
+    }
+
     public function orderTypes(): BelongsToMany
     {
         return $this->belongsToMany(OrderType::class, 'venue_order_types')

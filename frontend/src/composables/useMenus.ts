@@ -18,15 +18,19 @@ export interface MenuUpdateBody {
 }
 
 export function useMenus() {
+  const base = (brandId: number, venueId: number) =>
+    `/brands/${brandId}/venues/${venueId}/menus`
+
   return {
-    list: (brandId: number) => api.get<Menu[]>(`/brands/${brandId}/menus`),
-    get: (brandId: number, menuId: number) =>
-      api.get<Menu>(`/brands/${brandId}/menus/${menuId}`),
-    create: (brandId: number, body: MenuCreateBody) =>
-      api.post<Menu>(`/brands/${brandId}/menus`, body),
-    update: (brandId: number, menuId: number, body: MenuUpdateBody) =>
-      api.patch<Menu>(`/brands/${brandId}/menus/${menuId}`, body),
-    remove: (brandId: number, menuId: number) =>
-      api.del(`/brands/${brandId}/menus/${menuId}`),
+    list: (brandId: number, venueId: number) =>
+      api.get<Menu[]>(base(brandId, venueId)),
+    get: (brandId: number, venueId: number, menuId: number) =>
+      api.get<Menu>(`${base(brandId, venueId)}/${menuId}`),
+    create: (brandId: number, venueId: number, body: MenuCreateBody) =>
+      api.post<Menu>(base(brandId, venueId), body),
+    update: (brandId: number, venueId: number, menuId: number, body: MenuUpdateBody) =>
+      api.patch<Menu>(`${base(brandId, venueId)}/${menuId}`, body),
+    remove: (brandId: number, venueId: number, menuId: number) =>
+      api.del(`${base(brandId, venueId)}/${menuId}`),
   }
 }

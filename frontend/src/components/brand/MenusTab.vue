@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useMenus } from '../../composables/useMenus'
+import { useVenues } from '../../composables/useVenues'
 import { useServingTimes } from '../../composables/useServingTimes'
 import { useToast } from '../../composables/useToast'
 import { ApiError } from '../../composables/useApi'
@@ -16,9 +17,15 @@ import ServingTimesDiff from '../serving-times/ServingTimesDiff.vue'
 
 const props = defineProps<{ brandId: number }>()
 
+interface MenuWithVenue extends Menu {
+  venueName: string
+  brandId: number
+}
+
 interface MenuPreview {
   menuId: number
   menuName: string
+  venueName: string
   current: ServingTime[]
   proposed: ParseResult
   error?: string
@@ -26,7 +33,7 @@ interface MenuPreview {
   noChange: boolean
 }
 
-const menus = ref<Menu[]>([])
+const menus = ref<MenuWithVenue[]>([])
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
@@ -40,6 +47,7 @@ const previews = ref<MenuPreview[]>([])
 const applying = ref(false)
 
 const { list: listMenus } = useMenus()
+const { list: listVenues } = useVenues()
 const { parse: parseHours, replace: replaceHours, list: listServingTimes } =
   useServingTimes()
 const toast = useToast()
@@ -93,7 +101,15 @@ async function load(): Promise<void> {
   loading.value = true
   loadError.value = null
   try {
-    menus.value = await listMenus(props.brandId)
+    const venues = await listVenues(props.brandId)
+    const perVenue = await Promise.all(
+      venues.map((v) =>
+        listMenus(props.brandId, v.id).then((ms) =>
+          ms.map((m) => ({ ...m, venueName: v.name, brandId: props.brandId })),
+        ),
+      ),
+    )
+    menus.value = perVenue.flat()
     selectedIds.value = new Set(menus.value.map((m) => m.id))
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : 'Network error'
@@ -154,6 +170,7 @@ async function onParse(): Promise<void> {
           return {
             menuId: menu.id,
             menuName: menu.name,
+            venueName: menu.venueName,
             current,
             proposed,
             skipped: false,
@@ -165,6 +182,7 @@ async function onParse(): Promise<void> {
           return {
             menuId: menu.id,
             menuName: menu.name,
+            venueName: menu.venueName,
             current: menu.serving_times ?? [],
             proposed: { serving_times: [], clarification_needed: false, clarification_message: null },
             error: e instanceof ApiError ? e.message : 'Network error',
@@ -291,10 +309,7 @@ function timeRange(s: ServingTime): string {
 
     <div v-else-if="!menus.length" class="state">
       <h3>No menus yet</h3>
-      <p>
-        This brand has no menus. Add one from
-        <RouterLink :to="`/brands/${brandId}`">the Brand page</RouterLink> first.
-      </p>
+      <p>No venues have menus configured yet. Add menus through a venue's detail page.</p>
     </div>
 
     <template v-else>
@@ -339,12 +354,13 @@ function timeRange(s: ServingTime): string {
             </label>
             <div class="row__main">
               <RouterLink
-                :to="`/brands/${brandId}/menus/${m.id}`"
+                :to="`/brands/${brandId}/venues/${m.venue_id}/menus/${m.id}`"
                 class="row__name"
                 @click.stop
               >
                 {{ m.name }}
               </RouterLink>
+              <span class="row__venue">{{ m.venueName }}</span>
               <span v-if="m.description" class="row__sub">{{ m.description }}</span>
               <span
                 v-if="m.active === false"
@@ -512,7 +528,10 @@ function timeRange(s: ServingTime): string {
               </label>
               <span v-else class="preview-card__check-spacer"></span>
 
-              <h4 class="preview-card__name">{{ p.menuName }}</h4>
+              <h4 class="preview-card__name">
+                {{ p.menuName }}
+                <span class="preview-card__venue">@ {{ p.venueName }}</span>
+              </h4>
 
               <span v-if="p.error" class="preview-card__status preview-card__status--error">
                 Error
@@ -669,6 +688,7 @@ function timeRange(s: ServingTime): string {
   font-size: 14px;
 }
 .row__name:hover { color: var(--primary-accent-100); text-decoration: underline; }
+.row__venue { font-size: 11px; color: var(--grayscale-50); font-weight: 500; }
 .row__sub { font-size: 12px; color: var(--grayscale-50); }
 .row__inactive {
   display: inline-flex;
@@ -861,6 +881,13 @@ function timeRange(s: ServingTime): string {
   color: var(--grayscale-100);
   flex: 1;
 }
+.preview-card__venue {
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--grayscale-50);
+  margin-left: 4px;
+}
+
 .preview-card__status {
   font-size: 11px;
   font-weight: var(--font-weight-semibold);

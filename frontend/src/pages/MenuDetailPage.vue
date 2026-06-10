@@ -13,6 +13,7 @@ const route = useRoute()
 const { get } = useMenus()
 
 const brandId = computed(() => Number(route.params.brandId))
+const venueId = computed(() => Number(route.params.venueId))
 const menuId = computed(() => Number(route.params.menuId))
 const menu = ref<Menu | null>(null)
 const loading = ref(true)
@@ -25,14 +26,14 @@ const tabs: Tab[] = [
 ]
 
 onMounted(load)
-watch([brandId, menuId], load)
+watch([brandId, venueId, menuId], load)
 
 async function load(): Promise<void> {
-  if (!brandId.value || !menuId.value) return
+  if (!brandId.value || !venueId.value || !menuId.value) return
   loading.value = true
   loadError.value = null
   try {
-    menu.value = await get(brandId.value, menuId.value)
+    menu.value = await get(brandId.value, venueId.value, menuId.value)
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : 'Network error'
   } finally {
@@ -61,8 +62,8 @@ watch(menu, (m) => {
     <PageHeader
       :title="menu.name"
       :subtitle="menu.description ?? undefined"
-      :back-to="`/brands/${brandId}`"
-      back-label="Back to brand"
+      :back-to="`/brands/${brandId}/venues/${venueId}`"
+      back-label="Back to venue"
     />
     <TabBar v-model="activeTab" :tabs="tabs" />
 
@@ -70,6 +71,7 @@ watch(menu, (m) => {
       <MenuInfoTab
         v-if="activeTab === 'info'"
         :brand-id="brandId"
+        :venue-id="venueId"
         :menu="menu"
         @updated="onMenuUpdated"
       />

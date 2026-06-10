@@ -11,14 +11,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Menu extends Model
 {
     protected $fillable = [
-        'brand_id', 'name', 'internal_name', 'description', 'active', 'position',
+        'venue_id', 'name', 'internal_name', 'description', 'active', 'position',
     ];
 
     protected $casts = ['active' => 'boolean'];
 
-    public function brand(): BelongsTo
+    public function venue(): BelongsTo
     {
-        return $this->belongsTo(Brand::class);
+        return $this->belongsTo(Venue::class);
     }
 
     public function servingTimes(): HasMany

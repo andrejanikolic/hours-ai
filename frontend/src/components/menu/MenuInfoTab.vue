@@ -9,7 +9,7 @@ import AppTextarea from '../shared/AppTextarea.vue'
 import AppToggle from '../shared/AppToggle.vue'
 import AppButton from '../shared/AppButton.vue'
 
-const props = defineProps<{ brandId: number; menu: Menu }>()
+const props = defineProps<{ brandId: number; venueId: number; menu: Menu }>()
 const emit = defineEmits<{ (e: 'updated', menu: Menu): void }>()
 
 const name = ref(props.menu.name)
@@ -52,7 +52,7 @@ async function save(): Promise<void> {
       patch.description = description.value.trim() || null
     }
     if (active.value !== props.menu.active) patch.active = active.value
-    const updated = await update(props.brandId, props.menu.id, patch)
+    const updated = await update(props.brandId, props.venueId, props.menu.id, patch)
     emit('updated', updated)
     toast.success('Menu updated')
   } catch (e) {

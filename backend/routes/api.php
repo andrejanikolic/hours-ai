@@ -22,15 +22,17 @@ Route::prefix('stores/{storeId}')->group(function () {
 // Brands
 Route::apiResource('brands', BrandController::class);
 
-// Venues + Menus scoped under brand
+// Venues scoped under brand
 Route::prefix('brands/{brand}')->group(function () {
     Route::apiResource('venues', VenueController::class);
 
-    Route::get('venues/{venue}/order-types', [OrderTypeController::class, 'venueOrderTypes']);
-    Route::post('venues/{venue}/order-types', [OrderTypeController::class, 'attachToVenue']);
-    Route::delete('venues/{venue}/order-types/{orderTypeId}', [OrderTypeController::class, 'detachFromVenue']);
+    Route::prefix('venues/{venue}')->group(function () {
+        Route::get('order-types', [OrderTypeController::class, 'venueOrderTypes']);
+        Route::post('order-types', [OrderTypeController::class, 'attachToVenue']);
+        Route::delete('order-types/{orderTypeId}', [OrderTypeController::class, 'detachFromVenue']);
 
-    Route::apiResource('menus', MenuController::class);
+        Route::apiResource('menus', MenuController::class);
+    });
 });
 
 // Global order types list

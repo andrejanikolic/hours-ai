@@ -28,7 +28,7 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Venue' },
   },
   {
-    path: '/brands/:brandId/menus/:menuId',
+    path: '/brands/:brandId/venues/:venueId/menus/:menuId',
     name: 'menu-detail',
     component: () => import('../pages/MenuDetailPage.vue'),
     props: true,

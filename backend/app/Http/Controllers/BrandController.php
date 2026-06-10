@@ -19,7 +19,7 @@ class BrandController extends Controller
 
     public function show(Brand $brand): JsonResponse
     {
-        return response()->json($brand->load(['servingTimes', 'venues', 'menus']));
+        return response()->json($brand->load(['servingTimes', 'venues']));
     }
 
     public function store(Request $request): JsonResponse

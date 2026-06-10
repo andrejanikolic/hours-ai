@@ -11,13 +11,13 @@ class MenuSeeder extends Seeder
 {
     public function run(): void
     {
-        $demoBurgerId = DB::table('brands')->where('slug', 'demo-burger')->value('id');
-        $pastaHouseId = DB::table('brands')->where('slug', 'pasta-house')->value('id');
+        $demoBurgerDowntownId = DB::table('venues')->where('slug', 'downtown')->value('id');
+        $pastaHouseKnezId     = DB::table('venues')->where('slug', 'knez-mihailova')->value('id');
 
         $menus = [
-            // Demo Burger menus
+            // Demo Burger — Downtown venue menus
             [
-                'brand_id'      => $demoBurgerId,
+                'venue_id'      => $demoBurgerDowntownId,
                 'name'          => 'Breakfast',
                 'internal_name' => 'BK Morning Menu',
                 'description'   => 'Morning items served before 11am.',
@@ -25,7 +25,7 @@ class MenuSeeder extends Seeder
                 'position'      => 1,
             ],
             [
-                'brand_id'      => $demoBurgerId,
+                'venue_id'      => $demoBurgerDowntownId,
                 'name'          => 'All Day',
                 'internal_name' => 'BK Main Menu',
                 'description'   => 'Full menu available all day.',
@@ -33,16 +33,16 @@ class MenuSeeder extends Seeder
                 'position'      => 2,
             ],
             [
-                'brand_id'      => $demoBurgerId,
+                'venue_id'      => $demoBurgerDowntownId,
                 'name'          => 'Late Night',
                 'internal_name' => 'BK Late',
                 'description'   => 'Reduced menu after 10pm.',
                 'active'        => true,
                 'position'      => 3,
             ],
-            // Pasta House menus
+            // Pasta House — Knez Mihailova venue menus
             [
-                'brand_id'      => $pastaHouseId,
+                'venue_id'      => $pastaHouseKnezId,
                 'name'          => 'Lunch',
                 'internal_name' => 'PH Lunch',
                 'description'   => 'Lunch specials 12pm–3pm.',
@@ -50,7 +50,7 @@ class MenuSeeder extends Seeder
                 'position'      => 1,
             ],
             [
-                'brand_id'      => $pastaHouseId,
+                'venue_id'      => $pastaHouseKnezId,
                 'name'          => 'Dinner',
                 'internal_name' => 'PH Dinner',
                 'description'   => 'Full dinner menu.',

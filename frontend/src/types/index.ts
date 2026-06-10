@@ -47,7 +47,6 @@ export interface Brand {
   updated_at?: string
   serving_times?: ServingTime[]
   venues?: Venue[]
-  menus?: Menu[]
 }
 
 export interface Venue {
@@ -65,11 +64,12 @@ export interface Venue {
   updated_at?: string
   serving_times?: ServingTime[]
   order_types?: VenueOrderType[]
+  menus?: Menu[]
 }
 
 export interface Menu {
   id: number
-  brand_id: number
+  venue_id: number
   name: string
   internal_name?: string | null
   description: string | null

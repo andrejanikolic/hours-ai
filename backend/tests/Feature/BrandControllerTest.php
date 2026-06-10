@@ -49,7 +49,7 @@ class BrandControllerTest extends TestCase
         $this->getJson("/api/brands/{$brand->id}")
             ->assertOk()
             ->assertJsonPath('name', 'Acme')
-            ->assertJsonStructure(['id', 'name', 'slug', 'serving_times', 'venues', 'menus']);
+            ->assertJsonStructure(['id', 'name', 'slug', 'serving_times', 'venues']);
     }
 
     public function test_show_returns_404_for_missing_brand(): void

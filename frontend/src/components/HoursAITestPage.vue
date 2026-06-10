@@ -171,17 +171,18 @@ async function fetchAll() {
   for (const brand of brands) {
     result.push({ entityType: 'brand', entityId: brand.id, name: brand.name, parentName: '', servingTimes: brand.serving_times ?? [] })
 
-    const [venues, menus] = await Promise.all([
-      fetch(`${API}/brands/${brand.id}/venues`).then(r => r.json()),
-      fetch(`${API}/brands/${brand.id}/menus`).then(r => r.json()),
-    ])
+    const venues = await fetch(`${API}/brands/${brand.id}/venues`).then(r => r.json())
 
     for (const venue of venues) {
       result.push({ entityType: 'venue', entityId: venue.id, name: venue.name, parentName: brand.name, servingTimes: venue.serving_times ?? [] })
     }
-    for (const menu of menus) {
-      result.push({ entityType: 'menu', entityId: menu.id, name: menu.name, parentName: brand.name, servingTimes: menu.serving_times ?? [] })
-    }
+
+    await Promise.all(venues.map(async (venue: any) => {
+      const menus = await fetch(`${API}/brands/${brand.id}/venues/${venue.id}/menus`).then(r => r.json())
+      for (const menu of menus) {
+        result.push({ entityType: 'menu', entityId: menu.id, name: menu.name, parentName: brand.name, venueName: venue.name, servingTimes: menu.serving_times ?? [] })
+      }
+    }))
 
     for (const venue of venues) {
       const orderTypes = await fetch(`${API}/brands/${brand.id}/venues/${venue.id}/order-types`).then(r => r.json())

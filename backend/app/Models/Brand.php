@@ -18,11 +18,6 @@ class Brand extends Model
         return $this->hasMany(Venue::class);
     }
 
-    public function menus(): HasMany
-    {
-        return $this->hasMany(Menu::class);
-    }
-
     public function servingTimes(): HasMany
     {
         return $this->hasMany(ServingTime::class, 'parent_id')
