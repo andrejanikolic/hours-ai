@@ -19,21 +19,36 @@ class OrderTypeSeeder extends Seeder
             ['id' => 5, 'name' => 'Catering Delivery', 'slug' => 'catering-delivery'],
         ];
 
-        DB::table('order_types')->insert($orderTypes);
+        DB::table('order_types')->insertOrIgnore($orderTypes);
 
-        // Attach all 4 order types to every venue
+        // Attach all order types to every venue (skip existing pairs)
         $venues = DB::table('venues')->pluck('id');
 
+        $existing = DB::table('venue_order_types')
+            ->selectRaw("CONCAT(venue_id, '-', order_type_id) as pair")
+            ->pluck('pair')
+            ->flip();
+
+        $rows = [];
+        $now  = now();
         foreach ($venues as $venueId) {
             foreach ($orderTypes as $orderType) {
-                DB::table('venue_order_types')->insert([
+                $pair = "{$venueId}-{$orderType['id']}";
+                if ($existing->has($pair)) {
+                    continue;
+                }
+                $rows[] = [
                     'venue_id'      => $venueId,
                     'order_type_id' => $orderType['id'],
                     'active'        => true,
-                    'created_at'    => now(),
-                    'updated_at'    => now(),
-                ]);
+                    'created_at'    => $now,
+                    'updated_at'    => $now,
+                ];
             }
+        }
+
+        if ($rows) {
+            DB::table('venue_order_types')->insert($rows);
         }
     }
 }
