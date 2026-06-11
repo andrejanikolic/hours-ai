@@ -107,7 +107,7 @@ class DeepSeekServingTimesParser
                 'Authorization' => 'Bearer ' . config('services.deepseek.api_key'),
                 'Content-Type'  => 'application/json',
             ])->timeout(30)->post(config('services.deepseek.api_url') . '/chat/completions', [
-                'model'       => 'deepseek-v4-flash',
+                'model'       => 'deepseek-chat',
                 'temperature' => 0,
                 'messages'    => [
                     ['role' => 'system', 'content' => $systemPrompt],
