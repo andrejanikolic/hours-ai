@@ -57,6 +57,7 @@ class DeepSeekServingTimesParser
         - For weekday entries, "days" must be an array of day names (lowercase).
         - For special entries, "date" is required (YYYY-MM-DD); "date_to" is optional for date ranges.
         - Set "working": false for closed periods.
+        - For relative time expressions (e.g. "stop taking orders 30 minutes before closing", "last order 15 min before close"), look up the closing time (time_to) for the relevant day(s) in CURRENT SERVING TIMES, subtract the offset, and return the computed absolute time as time_to in HH:MM format. If different days have different closing times, apply the offset per day independently.
         - If the instruction is ambiguous or cannot be parsed, set clarification_needed to true and explain in clarification_message.
         - If the instruction clearly refers to a different entity (e.g. "Lunch menu" when you are configuring "Breakfast"), set should_update to false and serving_times to [].
         - Return ONLY a valid JSON object matching this schema — no markdown, no explanation:
